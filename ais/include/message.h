@@ -1,3 +1,18 @@
+/***************************************************************
+Copyright (c) 2022-2030, shisan233@sszc.live.
+SPDX-License-Identifier: MIT 
+File:        message.h
+Version:     1.0
+Author:      cjx
+start date:
+Description: 
+Version history
+
+[序号]    |   [修改日期]  |   [修改者]   |   [修改内容]
+1             2025-9-24      cjx        create
+
+*****************************************************************/
+
 #ifndef AIS_MESSAGE_H
 #define AIS_MESSAGE_H
 
