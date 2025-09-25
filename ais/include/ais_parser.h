@@ -1,3 +1,18 @@
+/***************************************************************
+Copyright (c) 2022-2030, shisan233@sszc.live.
+SPDX-License-Identifier: MIT
+File:        ais_parser.h
+Version:     1.0
+Author:      cjx
+start date:
+Description: 主解析器
+Version history
+
+[序号]    |   [修改日期]  |   [修改者]   |   [修改内容]
+1             2025-9-24      cjx        create
+
+*****************************************************************/
+
 #ifndef AIS_PARSER_H
 #define AIS_PARSER_H
 
@@ -5,9 +20,9 @@
 #include <string>
 #include <vector>
 
-#include "message.h"
-
 #include "config.h"
+
+#include "messages/message.h"
 
 namespace ais {
 
@@ -51,7 +66,7 @@ public:
     const Config& getConfig() const;
 
 private:
-    Config config; // 解析器配置
+    Config config_; // 解析器配置
     
     /**
      * @brief 解析二进制负载

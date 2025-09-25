@@ -1,108 +1,190 @@
+/***************************************************************
+Copyright (c) 2022-2030, shisan233@sszc.live.
+SPDX-License-Identifier: MIT 
+File:        bit_buffer.h
+Version:     1.0
+Author:      cjx
+start date:
+Description: 位操作核心类
+Version history
+
+[序号]    |   [修改日期]  |   [修改者]   |   [修改内容]
+1            2025-09-25       cjx         create
+
+*****************************************************************/
+
 #ifndef AIS_BIT_BUFFER_H
 #define AIS_BIT_BUFFER_H
 
-#include <bitset>
+#include <cmath>
+#include <cstdint>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace ais
 {
 
 /**
- * @brief 位缓冲区类
- * 
- * 用于从AIS二进制数据中提取各种类型的字段
+ * @brief 位缓冲区类 - 用于从AIS二进制数据中提取各种类型的字段
+ * @note 重新设计为更健壮和完整的实现
  */
 class BitBuffer
 {
 public:
     /**
      * @brief 构造函数
-     * @param payload 二进制负载数据
+     * @param binaryPayload 二进制负载数据
      */
-    explicit BitBuffer(const std::string &payload);
-
+    explicit BitBuffer(const std::string& binaryPayload);
+    
+    /**
+     * @brief 获取当前位位置
+     */
+    size_t getPosition() const { return bitPosition_; }
+    
+    /**
+     * @brief 设置位位置
+     * @param pos 新的位位置
+     */
+    void setPosition(size_t pos);
+    
+    /**
+     * @brief 获取剩余位数
+     */
+    size_t remaining() const { return totalBits_ - bitPosition_; }
+    
+    /************* 基本位操作 *************/
     /**
      * @brief 获取指定位范围的整数值
      * @param start 起始位位置
      * @param length 位数长度
      * @return 整数值
      */
-    int getInt(int start, int length);
+    int getInt(size_t start, size_t length);
+    
+    /**
+     * @brief 获取指定位范围的整数值（从当前位置）
+     * @param length 位数长度
+     * @return 整数值
+     */
+    int getInt(size_t length);
 
+    uint32_t getUInt32(size_t start, size_t length);
+    uint32_t getUInt32(size_t length);
+    
     /**
      * @brief 获取指定位范围的字符串值
      * @param start 起始位位置
      * @param length 位数长度
      * @return 字符串值
      */
-    std::string getString(int start, int length);
-
+    std::string getString(size_t start, size_t length);
+    
+    /**
+     * @brief 获取指定位范围的字符串值（从当前位置）
+     * @param length 位数长度
+     * @return 字符串值
+     */
+    std::string getString(size_t length);
+    
     /**
      * @brief 获取指定位的布尔值
      * @param start 位位置
      * @return 布尔值
      */
-    bool getBool(int start);
-
+    bool getBool(size_t start);
+    
+    /**
+     * @brief 获取指定位的布尔值（从当前位置）
+     * @return 布尔值
+     */
+    bool getBool();
+    
+    /************* 特殊数据类型 *************/
     /**
      * @brief 获取指定位范围的纬度值
      * @param start 起始位位置
      * @return 纬度值(度)
      */
-    double getLatitude(int start);
-
+    double getLatitude(size_t start, size_t length = 27);
+    
+    /**
+     * @brief 获取指定位范围的纬度值（从当前位置）
+     * @param length 位数长度（通常为27）
+     * @return 纬度值(度)
+     */
+    double getLatitude(size_t length = 27);
+    
     /**
      * @brief 获取指定位范围的经度值
      * @param start 起始位位置
      * @return 经度值(度)
      */
-    double getLongitude(int start);
-
+    double getLongitude(size_t start, size_t length = 28);
+    
+    /**
+     * @brief 获取指定位范围的经度值（从当前位置）
+     * @param length 位数长度（通常为28）
+     * @return 经度值(度)
+     */
+    double getLongitude(size_t length = 28);
+    
     /**
      * @brief 获取指定位范围的速度值
      * @param start 起始位位置
      * @return 速度值(节)
      */
-    double getSpeed(int start);
-
+    double getSpeed(size_t start, size_t length = 10);
+    
+    /**
+     * @brief 获取指定位范围的速度值（从当前位置）
+     * @param length 位数长度（通常为10）
+     * @return 速度值(节)
+     */
+    double getSpeed(size_t length = 10);
+    
     /**
      * @brief 获取指定位范围的航向值
      * @param start 起始位位置
      * @return 航向值(度)
      */
-    double getCourse(int start);
-
+    double getCourse(size_t start, size_t length = 12);
+    
     /**
-     * @brief 获取指定位范围的航行状态
-     * @param start 起始位位置
-     * @return 航行状态值
+     * @brief 获取指定位范围的航向值（从当前位置）
+     * @param length 位数长度（通常为12）
+     * @return 航向值(度)
      */
-    int getNavStatus(int start);
-
+    double getCourse(size_t length = 12);
+    
     /**
-     * @brief 获取指定位范围的机动指示器
-     * @param start 起始位位置
-     * @return 机动指示器值
+     * @brief 跳过指定数量的位
+     * @param bits 要跳过的位数
      */
-    int getManeuverIndicator(int start);
+    void skip(size_t bits);
 
+    
     /**
-     * @brief 获取指定位范围的RAIM标志
-     * @param start 位位置
-     * @return RAIM标志值
+     * @brief 将6-bit ASCII字符转换为二进制值
+     * @param c 6-bit ASCII字符
+     * @return 二进制值(0-63)
      */
-    int getRAIMFlag(int start);
+    static int charTo6Bit(char c);
 
-    /**
-     * @brief 获取指定位范围的通信状态
-     * @param start 起始位位置
-     * @return 通信状态值
-     */
-    int getCommunicationState(int start);
+    static char bit6ToChar(int value);
 
 private:
-    std::string payload;    // 二进制负载数据
-    size_t bitPosition = 0; // 当前位位置
+    std::vector<bool> bits_;    // 存储位的向量
+    size_t bitPosition_ = 0;    // 当前位位置
+    size_t totalBits_ = 0;      // 总位数
+
+    /**
+     * @brief 检查位范围是否有效
+     * @param start 起始位置
+     * @param length 长度
+     */
+    void checkRange(size_t start, size_t length) const;
 };
 
 } // namespace ais

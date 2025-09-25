@@ -5,7 +5,7 @@ File:        message.h
 Version:     1.0
 Author:      cjx
 start date:
-Description: 
+Description: 基类
 Version history
 
 [序号]    |   [修改日期]  |   [修改者]   |   [修改内容]
@@ -126,12 +126,8 @@ public:
      */
     virtual std::string toCsv() const;
 
-    /**
-     * @brief 创建特定类型的AIS消息
-     * @param type 消息类型
-     * @return 指向新创建消息的unique_ptr
-     */
-    static std::unique_ptr<AISMessage> create(AISMessageType type);
+    
+    static std::unique_ptr<AISMessage> parse(class BitBuffer& bits);
 };
 
 } // namespace ais

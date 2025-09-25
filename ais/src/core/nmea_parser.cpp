@@ -1,82 +1,163 @@
 #include "core/nmea_parser.h"
+#include "core/bit_buffer.h"  // 需要包含bit_buffer.h以使用charTo6Bit
 
 #include <algorithm>
-#include <bitset>
-#include <cstdint>
-#include <iomanip>
 #include <sstream>
+#include <vector>
+#include <stdexcept>
 
-namespace ais {
+namespace ais
+{
 
-bool NMEAParser::validateChecksum(const std::string& nmea) {
-    if (nmea.empty() || nmea[0] != '!') {
+bool NMEAParser::validateChecksum(const std::string &nmea)
+{
+    // 检查字符串是否以'$'开头
+    size_t start = nmea.find('$');
+    if (start == std::string::npos)
         return false;
-    }
-    
-    size_t starPos = nmea.find('*');
-    if (starPos == std::string::npos || starPos + 3 > nmea.length()) {
+
+    // 查找校验和分隔符'*'
+    size_t end = nmea.find('*');
+    if (end == std::string::npos || end <= start + 1)
         return false;
+
+    // 提取'$'和'*'之间的数据部分
+    std::string data = nmea.substr(start + 1, end - start - 1);
+    
+    // 计算数据的异或校验和
+    int checksum = 0;
+    for (char c : data)
+    {
+        checksum ^= c;
     }
-    
-    uint8_t calculated = 0;
-    for (size_t i = 1; i < starPos; i++) {
-        calculated ^= nmea[i];
+
+    // 提取并转换校验和字符串
+    std::string checksumStr = nmea.substr(end + 1, 2);
+    int expectedChecksum;
+    try
+    {
+        expectedChecksum = std::stoi(checksumStr, nullptr, 16);
     }
-    
-    std::stringstream ss;
-    ss << std::hex << std::uppercase << (int)calculated;
-    std::string calculatedStr = ss.str();
-    if (calculatedStr.length() == 1) calculatedStr = "0" + calculatedStr;
-    
-    std::string provided = nmea.substr(starPos + 1, 2);
-    
-    return calculatedStr == provided;
+    catch (const std::exception&)
+    {
+        return false; // 校验和格式错误
+    }
+
+    return checksum == expectedChecksum;
 }
 
-std::string NMEAParser::extractPayload(const std::string& nmea) {
+std::string NMEAParser::extractPayload(const std::string &nmea)
+{
+    // 查找第一个逗号
     size_t start = nmea.find(',');
-    if (start == std::string::npos) return "";
+    if (start == std::string::npos)
+        return "";
+
+    // 查找第二个逗号（负载开始位置）
+    start = nmea.find(',', start + 1);
+    if (start == std::string::npos)
+        return "";
+
+    start++; // 跳过第二个逗号，移动到负载开始位置
     
-    start++; // 跳过第一个逗号
+    // 查找校验和分隔符'*'，标识负载结束
     size_t end = nmea.find('*', start);
-    if (end == std::string::npos) return "";
-    
+    if (end == std::string::npos)
+        return "";
+
+    // 提取负载部分
     return nmea.substr(start, end - start);
 }
 
-int NMEAParser::getFragmentCount(const std::string& nmea) {
-    auto parts = split(nmea, ',');
-    return parts.size() > 1 ? std::stoi(parts[1]) : 1;
-}
-
-int NMEAParser::getFragmentNumber(const std::string& nmea) {
-    auto parts = split(nmea, ',');
-    return parts.size() > 2 ? std::stoi(parts[2]) : 1;
-}
-
-std::string NMEAParser::getMessageId(const std::string& nmea) {
-    auto parts = split(nmea, ',');
-    return parts.size() > 3 ? parts[3] : "";
-}
-
-std::string NMEAParser::decode6bitASCII(const std::string& payload) {
-    std::string binary;
-    for (char c : payload) {
-        if (c < 48 || c > 119) continue;
-        int value = (c - 48) & 0x3F;
-        binary += std::bitset<6>(value).to_string();
+std::string NMEAParser::decode6bitASCII(const std::string &payload)
+{
+    std::string binaryData;
+    
+    // 遍历负载中的每个字符
+    for (char c : payload)
+    {
+        // 将6-bit ASCII字符转换为0-63的整数值
+        int value = BitBuffer::charTo6Bit(c);
+        
+        // 将6位值转换为6个二进制字符（'0'或'1'）
+        for (int i = 5; i >= 0; i--)
+        {
+            binaryData += ((value & (1 << i)) != 0) ? '1' : '0';
+        }
     }
-    return binary;
+    
+    return binaryData;
 }
 
-std::vector<std::string> NMEAParser::split(const std::string& s, char delimiter) {
-    std::vector<std::string> tokens;
-    std::string token;
-    std::istringstream tokenStream(s);
-    while (std::getline(tokenStream, token, delimiter)) {
-        tokens.push_back(token);
+int NMEAParser::getFragmentCount(const std::string &nmea)
+{
+    auto parts = split(nmea, ',');
+    if (parts.size() > 1 && !parts[1].empty())
+    {
+        try
+        {
+            return std::stoi(parts[1]);
+        }
+        catch (const std::exception&)
+        {
+            return 1; // 转换失败时返回默认值
+        }
     }
-    return tokens;
+    return 1; // 默认单片段消息
+}
+
+int NMEAParser::getFragmentNumber(const std::string &nmea)
+{
+    auto parts = split(nmea, ',');
+    if (parts.size() > 2 && !parts[2].empty())
+    {
+        try
+        {
+            return std::stoi(parts[2]);
+        }
+        catch (const std::exception&)
+        {
+            return 1; // 转换失败时返回默认值
+        }
+    }
+    return 1; // 默认第一个片段
+}
+
+std::string NMEAParser::getMessageId(const std::string &nmea)
+{
+    auto parts = split(nmea, ',');
+    // 字段4（索引3）包含AIS消息类型
+    if (parts.size() > 3 && !parts[3].empty())
+    {
+        return parts[3];
+    }
+    return ""; // 消息类型字段不存在或为空
+}
+
+std::vector<std::string> NMEAParser::split(const std::string &str, char delimiter)
+{
+    std::vector<std::string> result;
+    std::stringstream ss(str);
+    std::string item;
+    
+    // 使用stringstream按分隔符分割字符串
+    while (std::getline(ss, item, delimiter))
+    {
+        result.push_back(item);
+    }
+    
+    return result;
+}
+
+int NMEAParser::hexCharToInt(char c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    return 0; // 无效字符返回0
 }
 
 } // namespace ais
