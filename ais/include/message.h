@@ -16,6 +16,7 @@ Version history
 #ifndef AIS_MESSAGE_H
 #define AIS_MESSAGE_H
 
+#include <cstdint>
 #include <memory>
 #include <string>
 

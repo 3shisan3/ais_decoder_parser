@@ -1,8 +1,10 @@
 #include "core/nmea_parser.h"
 
-#include <sstream>
-#include <iomanip>
 #include <algorithm>
+#include <bitset>
+#include <cstdint>
+#include <iomanip>
+#include <sstream>
 
 namespace ais {
 

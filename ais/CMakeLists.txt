@@ -2,6 +2,7 @@
 project(ais_parser)
 
 # 包含目录
+include(${CMAKE_MODULE_PATH}/IncludeDirectories_CFG.cmake)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # 源文件

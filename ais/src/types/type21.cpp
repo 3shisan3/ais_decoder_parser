@@ -65,8 +65,8 @@ std::unique_ptr<AidToNavigationReport> AidToNavigationReport::parse(BitBuffer& b
     report->aidType = bits.getInt(38, 5);
     report->name = bits.getString(43, 120);
     report->positionAccuracy = bits.getBool(163);
-    report->longitude = bits.getLongitude(164, 28);
-    report->latitude = bits.getLatitude(192, 27);
+    report->longitude = bits.getLongitude(164);
+    report->latitude = bits.getLatitude(192);
     report->dimensionToBow = bits.getInt(219, 9);
     report->dimensionToStern = bits.getInt(228, 9);
     report->dimensionToPort = bits.getInt(237, 6);

@@ -67,8 +67,8 @@ std::unique_ptr<StandardClassBReport> StandardClassBReport::parse(BitBuffer& bit
     report->spare1 = bits.getInt(38, 8);
     report->speedOverGround = bits.getInt(46, 10) / 10.0;
     report->positionAccuracy = bits.getBool(56);
-    report->longitude = bits.getLongitude(57, 28);
-    report->latitude = bits.getLatitude(85, 27);
+    report->longitude = bits.getLongitude(57);
+    report->latitude = bits.getLatitude(85);
     report->courseOverGround = bits.getInt(112, 12) / 10.0;
     report->trueHeading = bits.getInt(124, 9);
     report->timestampUTC = bits.getInt(133, 6);

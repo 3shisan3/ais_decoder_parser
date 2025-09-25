@@ -61,8 +61,8 @@ std::unique_ptr<BaseStationReport> BaseStationReport::parse(BitBuffer& bits) {
     report->minute = bits.getInt(66, 6);
     report->second = bits.getInt(72, 6);
     report->positionAccuracy = bits.getBool(78);
-    report->longitude = bits.getLongitude(79, 28);
-    report->latitude = bits.getLatitude(107, 27);
+    report->longitude = bits.getLongitude(79);
+    report->latitude = bits.getLatitude(107);
     report->epfdType = bits.getInt(135, 4);
     report->raimFlag = bits.getBool(148);
     report->spare = bits.getInt(149, 3);

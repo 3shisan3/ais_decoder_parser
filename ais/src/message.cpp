@@ -31,10 +31,10 @@ std::unique_ptr<AISMessage> AISMessage::create(AISMessageType type) {
     switch(type) {
         case AISMessageType::POSITION_REPORT_CLASS_A:
             return std::make_unique<PositionReport>();
-        case AISMessageType::POSITION_REPORT_CLASS_A_ASSIGNED:
-            return std::make_unique<PositionReportAssigned>();
-        case AISMessageType::POSITION_REPORT_CLASS_A_RESPONSE:
-            return std::make_unique<PositionReportResponse>();
+        // case AISMessageType::POSITION_REPORT_CLASS_A_ASSIGNED:
+        //     return std::make_unique<PositionReportAssigned>();
+        // case AISMessageType::POSITION_REPORT_CLASS_A_RESPONSE:
+        //     return std::make_unique<PositionReportResponse>();
         case AISMessageType::BASE_STATION_REPORT:
             return std::make_unique<BaseStationReport>();
         case AISMessageType::STATIC_VOYAGE_DATA:

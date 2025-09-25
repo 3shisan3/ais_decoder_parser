@@ -58,8 +58,8 @@ std::unique_ptr<PositionReport> PositionReport::parse(BitBuffer& bits) {
     report->rateOfTurn = bits.getInt(42, 8);
     report->speedOverGround = bits.getInt(50, 10) / 10.0;
     report->positionAccuracy = bits.getBool(60);
-    report->longitude = bits.getLongitude(61, 28);
-    report->latitude = bits.getLatitude(89, 27);
+    report->longitude = bits.getLongitude(61);
+    report->latitude = bits.getLatitude(89);
     report->courseOverGround = bits.getInt(116, 12) / 10.0;
     report->trueHeading = bits.getInt(128, 9);
     report->timestampUTC = bits.getInt(137, 6);

@@ -7,7 +7,7 @@
 
 #include "message.h"
 
-class Config;
+#include "config.h"
 
 namespace ais {
 

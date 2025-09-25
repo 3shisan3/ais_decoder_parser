@@ -51,8 +51,8 @@ std::unique_ptr<LongRangePositionReport> LongRangePositionReport::parse(BitBuffe
     report->positionAccuracy = bits.getBool(38);
     report->raimFlag = bits.getBool(39);
     report->navigationStatus = bits.getInt(40, 4);
-    report->longitude = bits.getLongitude(44, 18);
-    report->latitude = bits.getLatitude(62, 17);
+    report->longitude = bits.getLongitude(44);
+    report->latitude = bits.getLatitude(62);
     report->speedOverGround = bits.getInt(79, 6);
     report->courseOverGround = bits.getInt(85, 6);
     report->gnssPositionStatus = bits.getBool(91);
