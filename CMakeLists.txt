@@ -11,11 +11,13 @@ set(AIS_SOURCES_ROOT ${CMAKE_CURRENT_LIST_DIR})
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 add_definitions(-DPROJECT_NAME=\"${PROJECT_NAME}\")
 
+set(MODULES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
+
 # 构建前提
 option(ENABLE_LOGGING "开启日志打印功能" ON)
 
-add_subdirectory(logger)
+add_subdirectory(${MODULES_DIR}/logger)
 
-add_subdirectory(ais)
+add_subdirectory(${MODULES_DIR}/ais)
 
-add_subdirectory(communicate)
+add_subdirectory(${MODULES_DIR}/communicate)

@@ -1,3 +1,0 @@
-project(ais_decoder_parser_ui)
-
-

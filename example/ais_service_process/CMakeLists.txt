@@ -1,0 +1,1 @@
+project(ais_decoder_parser)

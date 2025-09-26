@@ -1,1 +1,1 @@
-include_directories(${AIS_SOURCES_ROOT}/config/include)
+include_directories(${AIS_SOURCES_ROOT}/modules/config/include)
