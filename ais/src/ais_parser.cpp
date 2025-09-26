@@ -6,7 +6,7 @@
 
 namespace ais {
 
-AISParser::AISParser(const Config& cfg) : config_(cfg) {}
+AISParser::AISParser(const AISParseCfg& cfg) : config_(cfg) {}
 
 std::unique_ptr<AISMessage> AISParser::parse(const std::string &nmea) const
 {
@@ -41,11 +41,14 @@ std::unique_ptr<AISMessage> AISParser::parse(const std::string &nmea) const
     return parseBinary(NMEAParser::decode6bitASCII(payload));
 }
 
-std::vector<std::unique_ptr<AISMessage>> AISParser::parseBatch(const std::vector<std::string>& nmeaSentences) const {
+std::vector<std::unique_ptr<AISMessage>> AISParser::parseBatch(const std::vector<std::string> &nmeaSentences) const
+{
     std::vector<std::unique_ptr<AISMessage>> messages;
-    for (const auto& nmea : nmeaSentences) {
+    for (const auto &nmea : nmeaSentences)
+    {
         auto msg = parse(nmea);
-        if (msg) {
+        if (msg)
+        {
             messages.push_back(std::move(msg));
         }
     }
@@ -66,11 +69,13 @@ std::unique_ptr<AISMessage> AISParser::parseBinary(const std::string &binaryData
     }
 }
 
-void AISParser::setConfig(const Config& newConfig) {
+void AISParser::setConfig(const AISParseCfg &newConfig)
+{
     config_ = newConfig;
 }
 
-const Config& AISParser::getConfig() const {
+const AISParseCfg &AISParser::getConfig() const
+{
     return config_;
 }
 

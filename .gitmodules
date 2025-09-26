@@ -1,0 +1,3 @@
+[submodule "communicate/udp-tcp-communicate"]
+	path = communicate/udp-tcp-communicate
+	url = git@github.com:3shisan3/udp-tcp-communicate.git
