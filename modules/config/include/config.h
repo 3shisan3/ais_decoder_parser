@@ -53,6 +53,9 @@ struct CommunicateCfg
     int subPort;        // 本地监听信息端口
     std::string sendIP; // 对外发送目标IP
     int sendPort;       // 对外发送目标端口
+
+    int msgSaveSize;    // 本地保留消息最大长度（设置非正整数表示 不限制存储数量）
+    int msgSaveTime;    // 本地保留消息的有效时间（单位秒）（设置非正整数表示 永久保留）
 };
 
 } // namespace ais

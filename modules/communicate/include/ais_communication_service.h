@@ -5,6 +5,7 @@
 
 #include "ais_parser.h"
 #include "config.h"
+#include "lru.h"
 
 #include <atomic>
 #include <memory>
@@ -65,9 +66,9 @@ protected:
      */
     void processAISMessage(const AISMessage& aisMsg);
 
-    // AIS数据/按船舶编号（mssi）记录
-    std::unordered_map<uint32_t, std::string> shipInfoMap_;
-    mutable std::mutex dataMutex_;
+    // LRU缓存管理船舶信息，key为MMSI，value为CSV格式的船舶信息
+    // 使用LRU缓存管理船舶信息，自动控制大小和时效性
+    CLRU<uint32_t, std::string, std::mutex> shipInfoCache_;
 
 private:
     std::shared_ptr<AISParser> aisParser_;          // 外部提供的AIS解析器
