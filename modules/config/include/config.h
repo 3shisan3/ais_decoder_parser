@@ -41,6 +41,7 @@ enum class StorageType
  */
 struct AISSaveCfg
 {
+    bool saveSwitch = false;                    // 启用本地缓存
     StorageType storageType = StorageType::CSV; // 存储类型
     std::string storagePath = "ais_data.csv";   // 存储路径
 };

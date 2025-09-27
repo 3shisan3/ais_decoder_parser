@@ -38,5 +38,6 @@ if (ENABLE_LOGGING)
     target_compile_definitions(${PROJECT_NAME} INTERFACE 
         $<$<CONFIG:Debug>:GLOBAL_LOG_LEVEL=0>
         $<$<NOT:$<CONFIG:Debug>>:GLOBAL_LOG_LEVEL=2>  # 非Debug模式
+        $<$<BOOL:${ENABLE_LOGGING}>:ENABLE_LOGGING>
     )
 endif()

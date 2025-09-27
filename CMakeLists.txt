@@ -17,7 +17,8 @@ set(MODULES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 option(ENABLE_LOGGING "开启日志打印功能" ON)
 
 add_subdirectory(${MODULES_DIR}/logger)
-
 add_subdirectory(${MODULES_DIR}/ais)
-
 add_subdirectory(${MODULES_DIR}/communicate)
+add_subdirectory(${MODULES_DIR}/config)
+
+# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/example/ais_service_process)

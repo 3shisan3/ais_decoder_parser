@@ -22,10 +22,7 @@ else()
 endif()
 
 # 包含目录
-include(${CMAKE_MODULE_PATH}/IncludeDirectories_AIS.cmake)
-include(${CMAKE_MODULE_PATH}/IncludeDirectories_CFG.cmake)
-include(${CMAKE_MODULE_PATH}/IncludeDirectories_LOG.cmake)
-include_directories(${CMAKE_CURRENT_LIST_DIR}/include)
+include(${CMAKE_MODULE_PATH}/IncludeDirectories_COMM.cmake)
 
 # 源文件
 file(GLOB_RECURSE AIS_COMMUNICATE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/src/*.cpp")

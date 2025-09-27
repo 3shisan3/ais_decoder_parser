@@ -1,0 +1,29 @@
+# AIS配置
+ais:
+  # AIS日志配置
+  logger:
+    enableLogging: true         # 启用日志开关
+    logFile: "ais_parser.log"   # 日志保存路径
+  
+  # 解析器配置
+  parser:
+    validateChecksum: true            # 是否验证校验和
+    enableMultipartReassembly: true   # 是否启用多部分消息重组
+    maxMultipartAge: 300              # 多部分消息最大保留时间(秒)
+  
+  # 存储配置
+  save:
+    storageSwitch: false              # 启用存储开关
+    storageType: "CSV"                # 本地留存ais数据格式
+    storagePath: "ais_data.csv"       # 本地留存ais数据保存路径
+  
+  # 通讯配置
+  communicate:
+    subPort: 8080                     # 本地订阅ais输入端口号
+    sendIP: "192.168.1.100"           # ais数据处理后转发目标IP
+    sendPort: 9000                    # ais数据处理后转发目标端口
+    msgSaveSize: 0                    # 通讯保留消息最大长度（设置非正整数表示 不限制存储数量）
+    msgSaveTime: 0                    # 保留消息的有效时间（单位秒）（设置非正整数表示 永久保留）
+
+# 通讯库配置文件路径
+udp_tcp_communicate_cfg_path: ""
