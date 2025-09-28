@@ -21,4 +21,5 @@ add_subdirectory(${MODULES_DIR}/ais)
 add_subdirectory(${MODULES_DIR}/communicate)
 add_subdirectory(${MODULES_DIR}/config)
 
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/example/ais_service_process)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/example/ais_gui_process)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/example/ais_service_process)

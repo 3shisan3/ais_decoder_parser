@@ -29,5 +29,7 @@ file(GLOB_RECURSE AIS_COMMUNICATE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/src/*.cpp")
 
 add_library(ais_parser_communicate STATIC ${AIS_COMMUNICATE_SOURCES})
 
-target_link_libraries(ais_parser_communicate udp-tcp-communicate)
+target_link_libraries(ais_parser_communicate PUBLIC
+    udp-tcp-communicate
+)
 

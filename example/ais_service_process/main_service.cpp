@@ -26,3 +26,16 @@ void signalHandler(int signal)
     g_running = false;
 }
 
+int main(int argc, char* argv[])
+{
+    // 读取启动时输入，确认是否开启IPC功能
+
+    // 读取启动时输入，获取配置文件路径，否则读默认路径（./ais_config.yaml）
+
+    // 初始化AIS通信服务类
+
+    // 程序保活
+
+    return 0;
+}
+
