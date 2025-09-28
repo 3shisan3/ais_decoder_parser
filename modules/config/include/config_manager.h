@@ -8,13 +8,14 @@
 #include <string>
 #include <memory>
 #include <optional>
+#include <functional>
 
 namespace ais
 {
 
 /**
  * @brief 配置管理类
- * 负责加载、解析和管理YAML配置文件，并提供各配置结构的访问接口
+ * 负责加载、解析和管理YAML配置文件，并提供各配置结构的访问和修改接口
  * 如果配置不存在，则使用默认值；通讯配置可能返回空指针
  */
 class ConfigManager
@@ -27,14 +28,25 @@ private:
     AISParseCfg parseCfg_;                         // 解析器配置
     AISSaveCfg saveCfg_;                           // 存储配置
     std::optional<CommunicateCfg> communicateCfg_; // 通讯配置（可选）
+    std::string udpTcpCommunicateCfgPath_;         // 通讯库配置文件路径
     
     bool isLoaded_;                                // 配置是否已加载
+
+    // 配置变更回调函数类型
+    using ConfigChangeCallback = std::function<void()>;
+    ConfigChangeCallback configChangeCallback_;     // 配置变更回调
 
     // 私有方法
     void parseLoggerConfig();
     void parseParserConfig();
     void parseSaveConfig();
     void parseCommunicateConfig();
+    void parseUdpTcpCommunicateCfgPath();
+
+    /**
+     * @brief 触发配置变更回调(可由外部传入函数指针方便配置修改触发一些外部行为)
+     */
+    void notifyConfigChange();
 
 public:
     /**
@@ -61,10 +73,18 @@ public:
     bool reloadConfig();
     
     /**
+     * @brief 保存配置到文件
+     * @return bool true-保存成功, false-保存失败
+     */
+    bool saveConfig();
+    
+    /**
      * @brief 检查配置是否已加载
      * @return bool true-已加载, false-未加载
      */
     bool isConfigLoaded() const;
+    
+    // ============ 获取配置接口 ============
     
     /**
      * @brief 获取日志配置
@@ -91,10 +111,59 @@ public:
     std::optional<CommunicateCfg> getCommunicateConfig();
     
     /**
+     * @brief 获取通讯库配置文件路径
+     * @return std::string 通讯库配置文件路径，如果不存在则返回空字符串
+     */
+    std::string getUdpTcpCommunicateCfgPath();
+    
+    /**
      * @brief 获取完整的配置节点（用于高级操作）
      * @return const YAML::Node& YAML配置节点引用
      */
     const YAML::Node& getConfigNode();
+    
+    // ============ 修改配置接口 ============
+    
+    /**
+     * @brief 设置日志配置
+     * @param cfg 新的日志配置
+     */
+    void setLoggerConfig(const LoggerCfg& cfg);
+    
+    /**
+     * @brief 设置解析器配置
+     * @param cfg 新的解析器配置
+     */
+    void setParserConfig(const AISParseCfg& cfg);
+    
+    /**
+     * @brief 设置存储配置
+     * @param cfg 新的存储配置
+     */
+    void setSaveConfig(const AISSaveCfg& cfg);
+    
+    /**
+     * @brief 设置通讯配置
+     * @param cfg 新的通讯配置，如果传入std::nullopt则清除通讯配置
+     */
+    void setCommunicateConfig(const std::optional<CommunicateCfg>& cfg);
+    
+    /**
+     * @brief 设置通讯库配置文件路径
+     * @param path 新的通讯库配置文件路径
+     */
+    void setUdpTcpCommunicateCfgPath(const std::string& path);
+    
+    /**
+     * @brief 设置配置变更回调函数
+     * @param callback 回调函数，当配置发生变化时调用
+     */
+    void setConfigChangeCallback(const ConfigChangeCallback& callback);
+    
+    /**
+     * @brief 重置所有配置为默认值
+     */
+    void resetToDefaults();
 };
 
 } // namespace ais

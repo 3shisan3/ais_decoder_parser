@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
     std::signal(SIGTERM, signalHandler);
     
     // 解析命令行参数
-    bool enableIPC = false;
+    bool enableIPC = true;
     std::string configPath = "ais_config.yaml";
     
     for (int i = 1; i < argc; ++i) {
@@ -141,6 +141,7 @@ int main(int argc, char* argv[])
     auto parseCfg = configManager.getParserConfig();
     auto saveCfg = configManager.getSaveConfig();
     auto commCfgOpt = configManager.getCommunicateConfig();
+    auto udptcpLibCfg = configManager.getUdpTcpCommunicateCfgPath();
     
     if (!commCfgOpt) {
         std::cerr << "配置文件中缺少通信配置" << std::endl;
@@ -162,7 +163,7 @@ int main(int argc, char* argv[])
     }
     
     // 初始化服务
-    int initResult = g_aisService->initialize(commCfg, configPath);
+    int initResult = g_aisService->initialize(commCfg, udptcpLibCfg);
     if (initResult != 0) {
         std::cerr << "AIS通信服务初始化失败: " << initResult << std::endl;
         return 1;

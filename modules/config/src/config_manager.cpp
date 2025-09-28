@@ -1,6 +1,7 @@
 #include "config_manager.h"
 
 #include <iostream>
+#include <fstream>
 
 namespace ais
 {
@@ -14,6 +15,7 @@ ConfigManager::ConfigManager(const std::string& configFile)
     parseCfg_ = {true, true, 300};
     saveCfg_ = {false, StorageType::CSV, "ais_data.csv"};
     communicateCfg_ = std::nullopt;
+    udpTcpCommunicateCfgPath_ = "";
 }
 
 // ConfigManager 析构函数
@@ -34,8 +36,10 @@ bool ConfigManager::loadConfig()
         parseParserConfig();
         parseSaveConfig();
         parseCommunicateConfig();
+        parseUdpTcpCommunicateCfgPath();
         
         isLoaded_ = true;
+        notifyConfigChange();
         return true;
         
     } catch (const YAML::Exception& e) {
@@ -56,11 +60,67 @@ bool ConfigManager::reloadConfig()
     return loadConfig();
 }
 
+// 保存配置到文件
+bool ConfigManager::saveConfig()
+{
+    try {
+        // 更新YAML节点
+        // 日志配置
+        configNode_["ais"]["logger"]["enableLogging"] = loggerCfg_.enableLogging;
+        configNode_["ais"]["logger"]["logFile"] = loggerCfg_.logFile;
+        
+        // 解析器配置
+        configNode_["ais"]["parser"]["validateChecksum"] = parseCfg_.validateChecksum;
+        configNode_["ais"]["parser"]["enableMultipartReassembly"] = parseCfg_.enableMultipartReassembly;
+        configNode_["ais"]["parser"]["maxMultipartAge"] = parseCfg_.maxMultipartAge;
+        
+        // 存储配置
+        configNode_["ais"]["save"]["saveSwitch"] = saveCfg_.saveSwitch;
+        
+        // 存储类型枚举转字符串
+        std::string storageTypeStr;
+        switch (saveCfg_.storageType) {
+            case StorageType::NONE: storageTypeStr = "NONE"; break;
+            case StorageType::DATABASE: storageTypeStr = "DATABASE"; break;
+            case StorageType::CSV: storageTypeStr = "CSV"; break;
+            case StorageType::MEMORY: storageTypeStr = "MEMORY"; break;
+            default: storageTypeStr = "CSV";
+        }
+        configNode_["ais"]["save"]["storageType"] = storageTypeStr;
+        configNode_["ais"]["save"]["storagePath"] = saveCfg_.storagePath;
+        
+        // 通讯配置
+        if (communicateCfg_.has_value()) {
+            configNode_["ais"]["communicate"]["subPort"] = communicateCfg_->subPort;
+            configNode_["ais"]["communicate"]["sendIP"] = communicateCfg_->sendIP;
+            configNode_["ais"]["communicate"]["sendPort"] = communicateCfg_->sendPort;
+            configNode_["ais"]["communicate"]["msgSaveSize"] = communicateCfg_->msgSaveSize;
+            configNode_["ais"]["communicate"]["msgSaveTime"] = communicateCfg_->msgSaveTime;
+        }
+        
+        // 通讯库配置文件路径
+        configNode_["udp_tcp_communicate_cfg_path"] = udpTcpCommunicateCfgPath_;
+        
+        // 写入文件
+        std::ofstream fout(configFile_);
+        fout << configNode_;
+        fout.close();
+        
+        return true;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error: Failed to save config file: " << e.what() << std::endl;
+        return false;
+    }
+}
+
 // 检查配置是否已加载
 bool ConfigManager::isConfigLoaded() const
 {
     return isLoaded_;
 }
+
+// ============ 获取配置接口 ============
 
 // 获取日志配置
 const LoggerCfg& ConfigManager::getLoggerConfig()
@@ -86,10 +146,80 @@ std::optional<CommunicateCfg> ConfigManager::getCommunicateConfig()
     return communicateCfg_;
 }
 
+// 获取通讯库配置文件路径
+std::string ConfigManager::getUdpTcpCommunicateCfgPath()
+{
+    return udpTcpCommunicateCfgPath_;
+}
+
 // 获取完整的配置节点
 const YAML::Node& ConfigManager::getConfigNode()
 {
     return configNode_;
+}
+
+// ============ 修改配置接口 ============
+
+// 设置日志配置
+void ConfigManager::setLoggerConfig(const LoggerCfg& cfg)
+{
+    loggerCfg_ = cfg;
+    notifyConfigChange();
+}
+
+// 设置解析器配置
+void ConfigManager::setParserConfig(const AISParseCfg& cfg)
+{
+    parseCfg_ = cfg;
+    notifyConfigChange();
+}
+
+// 设置存储配置
+void ConfigManager::setSaveConfig(const AISSaveCfg& cfg)
+{
+    saveCfg_ = cfg;
+    notifyConfigChange();
+}
+
+// 设置通讯配置
+void ConfigManager::setCommunicateConfig(const std::optional<CommunicateCfg>& cfg)
+{
+    communicateCfg_ = cfg;
+    notifyConfigChange();
+}
+
+// 设置通讯库配置文件路径
+void ConfigManager::setUdpTcpCommunicateCfgPath(const std::string& path)
+{
+    udpTcpCommunicateCfgPath_ = path;
+    notifyConfigChange();
+}
+
+// 设置配置变更回调函数
+void ConfigManager::setConfigChangeCallback(const ConfigChangeCallback& callback)
+{
+    configChangeCallback_ = callback;
+}
+
+// 重置所有配置为默认值
+void ConfigManager::resetToDefaults()
+{
+    loggerCfg_ = {true, "ais_parser.log"};
+    parseCfg_ = {true, true, 300};
+    saveCfg_ = {false, StorageType::CSV, "ais_data.csv"};
+    communicateCfg_ = std::nullopt;
+    udpTcpCommunicateCfgPath_ = "";
+    notifyConfigChange();
+}
+
+// ============ 私有方法 ============
+
+// 触发配置变更回调
+void ConfigManager::notifyConfigChange()
+{
+    if (configChangeCallback_) {
+        configChangeCallback_();
+    }
 }
 
 // 解析日志配置
@@ -195,6 +325,21 @@ void ConfigManager::parseCommunicateConfig()
     } catch (...) {
         // 忽略解析错误，通讯配置保持为空
         communicateCfg_ = std::nullopt;
+    }
+}
+
+// 解析通讯库配置文件路径
+void ConfigManager::parseUdpTcpCommunicateCfgPath()
+{
+    try {
+        if (configNode_["udp_tcp_communicate_cfg_path"]) {
+            udpTcpCommunicateCfgPath_ = configNode_["udp_tcp_communicate_cfg_path"].as<std::string>();
+        } else {
+            udpTcpCommunicateCfgPath_ = "";
+        }
+    } catch (...) {
+        // 忽略解析错误，使用默认值（空字符串）
+        udpTcpCommunicateCfgPath_ = "";
     }
 }
 
