@@ -5,12 +5,12 @@
 #include <QTabWidget>
 #include <QStatusBar>
 #include <QSystemTrayIcon>
+#include <QAction>
 
-#include "service_control_panel.h"
-#include "message_display_panel.h"
-#include "config_panel.h"
-#include "nmea_parser_panel.h"
-#include "ipc_client_manager.h"
+#include "ui/widgets/message_display_panel.h"
+#include "ui/widgets/nmea_parser_panel.h"
+#include "ui/widgets/service_control_panel.h"
+#include "core/ipc_client_manager.h"
 
 class MainWindow : public QMainWindow
 {
@@ -30,6 +30,10 @@ private slots:
     void onSystemTrayActivated(QSystemTrayIcon::ActivationReason reason);
     void showWindow();
     void hideWindow();
+    void onConnectToService();
+    void onDisconnectFromService();
+    void onServiceConfigChanged(const QVariantMap &config);
+    void onErrorOccurred(const QString &errorMessage);
 
 private:
     void createUI();
@@ -37,23 +41,30 @@ private:
     void createSystemTray();
     void connectSignals();
     void updateWindowTitle();
+    void initializeIPCClient();
+    void loadSettings();
+    void saveSettings();
 
     // UI组件
     QTabWidget *tabWidget;
-    ServiceControlPanel *serviceControlPanel;
     MessageDisplayPanel *messageDisplayPanel;
-    ConfigPanel *configPanel;
     NMEAParserPanel *nmeaParserPanel;
+    ServiceControlPanel *serviceControlPanel;
     
-    // 业务组件
+    // IPC客户端管理
     IPCClientManager *ipcClientManager;
     
     // 系统托盘
     QSystemTrayIcon *systemTrayIcon;
     QMenu *trayMenu;
     
+    // 状态变量
     bool serviceRunning;
     bool connectedToService;
+    
+    // 菜单动作
+    QAction *connectAction;
+    QAction *disconnectAction;
 };
 
 #endif // MAIN_WINDOW_H

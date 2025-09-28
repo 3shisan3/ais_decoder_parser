@@ -28,6 +28,8 @@ set(QT_DEPEND_LIBS
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${AIS_SOURCES_ROOT}/bin)
 
 # 引入 Qt 会干扰 CMAKE_MODULE_PATH
+include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_CFG.cmake)
+include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_AIS.cmake)
 include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_LOG.cmake)
 
 include_directories(
@@ -48,6 +50,7 @@ add_executable(ais_decoder_parser_ui ${AIS_GUI_SOURCES})
 target_link_libraries(ais_decoder_parser_ui
     PRIVATE spdlog::spdlog
     PRIVATE logger
+    PRIVATE ais_parser
     PRIVATE ${QT_DEPEND_LIBS}
 )
 
@@ -56,4 +59,69 @@ if(WIN32)
     target_link_libraries(ais_decoder_parser_ui
         PRIVATE ws2_32
     )
+endif()
+
+# 设置子项目特定的编译定义
+target_compile_definitions(ais_decoder_parser_ui PRIVATE
+    LOGGER_PROJECT_NAME=AIS_UI
+    LOGGING_SCHEME_SPDLOG
+    GLOBAL_LOG_LEVEL=1  # DEBUG级别
+)
+
+# 构建后运行依赖打包命令
+if(WIN32)
+    if (MINGW)
+        # 获取 UCRT64 工具链的 bin 目录
+        get_filename_component(COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+        get_filename_component(UCRT_BIN_DIR "${COMPILER_DIR}/../bin" ABSOLUTE)
+        
+        # 根据工具链类型选择部署脚本
+        if(CMAKE_CXX_COMPILER MATCHES ".*ucrt.*")
+            # UCRT 工具链
+            set(DEPLOY_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/script/tools/deploy_ucrt_dlls.sh")
+            set(TOOLCHAIN_TYPE "UCRT64")
+        else()
+            # 标准 MinGW 工具链
+            set(DEPLOY_SCRIPT "${CMAKE_CURRENT_LIST_DIR}/script/tools/deploy_mingw_dlls.sh")
+            set(TOOLCHAIN_TYPE "MinGW")
+        endif()
+        
+        # 检查脚本是否存在
+        if(EXISTS "${DEPLOY_SCRIPT}")
+            # 构建后分析依赖并复制
+            add_custom_command(TARGET ais_decoder_parser_ui POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+                COMMAND bash "${DEPLOY_SCRIPT}"
+                    "${TOOLCHAIN_BIN_DIR}"
+                    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+                    "$<TARGET_FILE:ais_decoder_parser_ui>"
+                COMMENT "Copying required ${TOOLCHAIN_TYPE} runtime DLLs..."
+                VERBATIM
+            )
+        else()
+            message(WARNING "Deploy script not found: ${DEPLOY_SCRIPT}")
+        endif()
+    endif()
+
+    # Qt 部署
+    find_program(WINDEPLOYQT_EXECUTABLE windeployqt.exe
+        HINTS "${QT_PREFIX_PATH}/bin"
+        DOC "Path to windeployqt executable"
+    )
+    
+    if(WINDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET ais_decoder_parser_ui POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/ui/qml"
+                --no-compiler-runtime
+                --no-system-d3d-compiler
+                --no-opengl-sw
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ais_decoder_parser_ui.exe"
+            COMMENT "Deploying Qt runtime dependencies..."
+            VERBATIM
+        )
+    else()
+        message(WARNING "windeployqt.exe not found, Qt deployment skipped")
+    endif()
 endif()

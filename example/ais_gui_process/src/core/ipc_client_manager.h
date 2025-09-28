@@ -2,12 +2,14 @@
 #define IPC_CLIENT_MANAGER_H
 
 #include <QObject>
-#include <QTcpSocket>
+#include <QVariant>
+#include <QString>
 #include <QTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#include "ais_protocol.h"
+#include "core/tcp_ipc_client.h"
+#include "core/ais_parser_manager.h"
 
 class IPCClientManager : public QObject
 {
@@ -17,42 +19,60 @@ public:
     explicit IPCClientManager(QObject *parent = nullptr);
     ~IPCClientManager();
 
-    bool connectToServer(const QString &host, quint16 port);
+    // 连接管理
+    bool connectToServer();
+    bool connectToServer(const QString &address, quint16 port);
     void disconnectFromServer();
     bool isConnected() const;
 
+    // 服务器配置
+    void setServerAddress(const QString &address);
+    void setServerPort(quint16 port);
+    QString serverAddress() const;
+    quint16 serverPort() const;
+
     // 服务控制命令
+    void sendStartCommand();
+    void sendStopCommand();
     void getServiceStatus();
-    void startService();
-    void stopService();
-    void updateConfig(const QJsonObject &config);
+    void getServiceConfig();
+    void updateServiceConfig(const QVariantMap &config);
+    void sendCustomCommand(const QString &command, const QVariantMap &params = QVariantMap());
+
+    // 获取解析器管理器
+    AISParserManager* getParserManager() const;
 
 signals:
-    void connected();
-    void disconnected();
+    void connectionStateChanged(bool connected);
     void messageReceived(const QString &message);
     void serviceStateChanged(bool running);
-    void configUpdated(const QJsonObject &config);
-    void errorOccurred(const QString &error);
+    void serviceConfigReceived(const QVariantMap &config);
+    void errorOccurred(const QString &errorMessage);
 
 private slots:
-    void onConnected();
-    void onDisconnected();
-    void onReadyRead();
-    void onErrorOccurred(QAbstractSocket::SocketError error);
+    void onClientConnected();
+    void onClientDisconnected();
+    void onClientError(const QString &errorMessage);
+    void onClientMessageReceived(const QString &message);
     void onReconnectTimeout();
 
 private:
-    void processMessage(const QByteArray &message);
-    void sendCommand(const QJsonObject &command);
-    void handleServiceStatus(const QJsonObject &data);
-    void handleConfigResponse(const QJsonObject &data);
+    void initializeClient();
+    QVariantMap parseMessage(const QString &message);
+    void sendCommand(const QVariantMap &command);
+    void startReconnectTimer();
+    void stopReconnectTimer();
 
-    QTcpSocket *socket;
+    ais::AISClient *ipcClient;
+    AISParserManager *parserManager;
+    
+    QString m_serverAddress;
+    quint16 m_serverPort;
+    bool m_connected;
+    bool m_autoReconnect;
+    
     QTimer *reconnectTimer;
-    QString serverHost;
-    quint16 serverPort;
-    bool autoReconnect;
+    int reconnectAttempts;
 };
 
 #endif // IPC_CLIENT_MANAGER_H

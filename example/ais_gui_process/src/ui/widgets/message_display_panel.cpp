@@ -1,4 +1,5 @@
 #include "message_display_panel.h"
+
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFileDialog>

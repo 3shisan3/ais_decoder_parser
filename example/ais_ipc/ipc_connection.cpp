@@ -135,7 +135,7 @@ void IPCConnection::handleError(const std::string& error)
         
         // 在实际实现中，这里应该启动重连线程
         // 这里简化处理，只是记录日志
-        LOG_INFO("Auto reconnect would start in {}ms", reconnectIntervalMs_);
+        LOG_INFO("Auto reconnect would start in {}ms", reconnectIntervalMs_.load());
     }
 }
 

@@ -1,184 +1,328 @@
 #include "ipc_client_manager.h"
-#include <QHostAddress>
+
+#include <QDateTime>
+#include <QThread>
+#include <QMessageBox>
 
 IPCClientManager::IPCClientManager(QObject *parent)
     : QObject(parent)
-    , socket(nullptr)
-    , autoReconnect(false)
+    , ipcClient(nullptr)
+    , parserManager(new AISParserManager(this))
+    , m_serverAddress("127.0.0.1")
+    , m_serverPort(2333)
+    , m_connected(false)
+    , m_autoReconnect(true)
+    , reconnectAttempts(0)
 {
-    socket = new QTcpSocket(this);
-    
     reconnectTimer = new QTimer(this);
-    reconnectTimer->setInterval(3000);
+    reconnectTimer->setInterval(5000); // 5秒重连间隔
     reconnectTimer->setSingleShot(true);
-    
-    connect(socket, &QTcpSocket::connected, this, &IPCClientManager::onConnected);
-    connect(socket, &QTcpSocket::disconnected, this, &IPCClientManager::onDisconnected);
-    connect(socket, &QTcpSocket::readyRead, this, &IPCClientManager::onReadyRead);
-    connect(socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::errorOccurred),
-            this, &IPCClientManager::onErrorOccurred);
     connect(reconnectTimer, &QTimer::timeout, this, &IPCClientManager::onReconnectTimeout);
+    
+    initializeClient();
 }
 
 IPCClientManager::~IPCClientManager()
 {
     disconnectFromServer();
+    if (ipcClient) {
+        delete ipcClient;
+    }
 }
 
-bool IPCClientManager::connectToServer(const QString &host, quint16 port)
+void IPCClientManager::initializeClient()
 {
-    if (socket->state() == QAbstractSocket::ConnectedState) {
+    if (ipcClient) {
         disconnectFromServer();
+        delete ipcClient;
     }
     
-    serverHost = host;
-    serverPort = port;
+    ipcClient = new ais::AISClient();
     
-    socket->connectToHost(host, port);
-    return true;
+    // 设置消息处理器
+    ipcClient->setMessageHandler([this](const ais::protocol::CommandMessage &cmd) {
+        QString message = QString::fromStdString(cmd.toJson());
+        QVariantMap parsed = parseMessage(message);
+        
+        // 处理不同类型的消息
+        if (parsed.contains("type")) {
+            QString msgType = parsed["type"].toString();
+            if (msgType == "status_update") {
+                bool running = parsed["status"].toString() == "running";
+                emit serviceStateChanged(running);
+            } else if (msgType == "log_message") {
+                QString logMsg = parsed["message"].toString();
+                emit messageReceived(logMsg);
+            }
+        }
+        
+        emit messageReceived(QString("收到消息: %1").arg(message));
+    });
+    
+    // 设置响应处理器
+    ipcClient->setResponseHandler([this](const ais::protocol::ResponseMessage &response) {
+        QVariantMap result = parseMessage(QString::fromStdString(response.toJson()));
+        
+        if (result.contains("status")) {
+            emit serviceStateChanged(result["status"].toString() == "running");
+        }
+        
+        if (result.contains("config")) {
+            emit serviceConfigReceived(result["config"].toMap());
+        }
+        
+        if (result.contains("error")) {
+            emit errorOccurred(result["error"].toString());
+        }
+    });
+    
+    // 设置错误处理器
+    ipcClient->setErrorHandler([this](const std::string &error) {
+        QString errorMsg = QString::fromStdString(error);
+        emit errorOccurred(errorMsg);
+        
+        // 自动重连逻辑
+        if (m_autoReconnect && m_connected) {
+            startReconnectTimer();
+        }
+    });
+}
+
+bool IPCClientManager::connectToServer()
+{
+    return connectToServer(m_serverAddress, m_serverPort);
+}
+
+bool IPCClientManager::connectToServer(const QString &address, quint16 port)
+{
+    if (isConnected()) {
+        disconnectFromServer();
+        QThread::msleep(100); // 短暂延迟
+    }
+    
+    stopReconnectTimer();
+    
+    try {
+        bool success = ipcClient->connectToServer(address.toStdString(), port);
+        if (success) {
+            m_connected = true;
+            m_serverAddress = address;
+            m_serverPort = port;
+            reconnectAttempts = 0;
+            emit connectionStateChanged(true);
+            return true;
+        }
+    } catch (const std::exception &e) {
+        emit errorOccurred(QString("连接失败: %1").arg(e.what()));
+    }
+    
+    // 连接失败，启动重连定时器
+    if (m_autoReconnect) {
+        startReconnectTimer();
+    }
+    
+    return false;
 }
 
 void IPCClientManager::disconnectFromServer()
 {
-    reconnectTimer->stop();
-    socket->disconnectFromHost();
+    stopReconnectTimer();
+    
+    if (ipcClient && isConnected()) {
+        ipcClient->disconnect();
+        m_connected = false;
+        emit connectionStateChanged(false);
+    }
 }
 
 bool IPCClientManager::isConnected() const
 {
-    return socket->state() == QAbstractSocket::ConnectedState;
+    return m_connected && ipcClient && ipcClient->isConnected();
+}
+
+void IPCClientManager::setServerAddress(const QString &address)
+{
+    m_serverAddress = address;
+}
+
+void IPCClientManager::setServerPort(quint16 port)
+{
+    m_serverPort = port;
+}
+
+QString IPCClientManager::serverAddress() const
+{
+    return m_serverAddress;
+}
+
+quint16 IPCClientManager::serverPort() const
+{
+    return m_serverPort;
+}
+
+void IPCClientManager::sendStartCommand()
+{
+    QVariantMap command;
+    command["type"] = "control";
+    command["action"] = "start";
+    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    sendCommand(command);
+}
+
+void IPCClientManager::sendStopCommand()
+{
+    QVariantMap command;
+    command["type"] = "control";
+    command["action"] = "stop";
+    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    sendCommand(command);
 }
 
 void IPCClientManager::getServiceStatus()
 {
-    QJsonObject command;
-    command["type"] = static_cast<int>(ais::protocol::CommandType::GET_STATUS);
-    command["sequence"] = QDateTime::currentSecsSinceEpoch();
-    sendCommand(command);
-}
-
-void IPCClientManager::startService()
-{
-    QJsonObject command;
-    command["type"] = static_cast<int>(ais::protocol::CommandType::START_SERVICE);
-    command["sequence"] = QDateTime::currentSecsSinceEpoch();
-    sendCommand(command);
-}
-
-void IPCClientManager::stopService()
-{
-    QJsonObject command;
-    command["type"] = static_cast<int>(ais::protocol::CommandType::STOP_SERVICE);
-    command["sequence"] = QDateTime::currentSecsSinceEpoch();
-    sendCommand(command);
-}
-
-void IPCClientManager::updateConfig(const QJsonObject &config)
-{
-    QJsonObject command;
-    command["type"] = static_cast<int>(ais::protocol::CommandType::CONFIG_UPDATE);
-    command["sequence"] = QDateTime::currentSecsSinceEpoch();
-    command["data"] = QJsonDocument(config).toJson(QJsonDocument::Compact);
-    sendCommand(command);
-}
-
-void IPCClientManager::onConnected()
-{
-    autoReconnect = true;
-    emit connected();
-}
-
-void IPCClientManager::onDisconnected()
-{
-    emit disconnected();
+    QVariantMap command;
+    command["type"] = "query";
+    command["action"] = "status";
+    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
     
-    if (autoReconnect) {
-        reconnectTimer->start();
+    sendCommand(command);
+}
+
+void IPCClientManager::getServiceConfig()
+{
+    QVariantMap command;
+    command["type"] = "query";
+    command["action"] = "config";
+    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    sendCommand(command);
+}
+
+void IPCClientManager::updateServiceConfig(const QVariantMap &config)
+{
+    QVariantMap command;
+    command["type"] = "control";
+    command["action"] = "update_config";
+    command["config"] = config;
+    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    sendCommand(command);
+}
+
+void IPCClientManager::sendCustomCommand(const QString &commandType, const QVariantMap &params)
+{
+    QVariantMap command;
+    command["type"] = "custom";
+    command["action"] = commandType;
+    command["params"] = params;
+    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    
+    sendCommand(command);
+}
+
+AISParserManager* IPCClientManager::getParserManager() const
+{
+    return parserManager;
+}
+
+void IPCClientManager::sendCommand(const QVariantMap &command)
+{
+    if (!isConnected()) {
+        emit errorOccurred("未连接到服务器");
+        return;
+    }
+    
+    try {
+        QJsonDocument doc(QJsonObject::fromVariantMap(command));
+        QString jsonStr = doc.toJson(QJsonDocument::Compact);
+        ipcClient->sendCommand(jsonStr.toStdString());
+    } catch (const std::exception &e) {
+        emit errorOccurred(QString("发送命令失败: %1").arg(e.what()));
     }
 }
 
-void IPCClientManager::onReadyRead()
+QVariantMap IPCClientManager::parseMessage(const QString &message)
 {
-    while (socket->canReadLine()) {
-        QByteArray message = socket->readLine().trimmed();
-        if (!message.isEmpty()) {
-            processMessage(message);
+    QVariantMap result;
+    
+    try {
+        QJsonDocument doc = QJsonDocument::fromJson(message.toUtf8());
+        if (!doc.isNull() && doc.isObject()) {
+            result = doc.object().toVariantMap();
         }
+    } catch (...) {
+        // 解析失败，返回原始消息
+        result["raw"] = message;
+    }
+    
+    return result;
+}
+
+void IPCClientManager::startReconnectTimer()
+{
+    reconnectAttempts++;
+    if (reconnectAttempts <= 10) { // 最多重试10次
+        reconnectTimer->start();
+        emit messageReceived(QString("尝试重新连接... (%1/10)").arg(reconnectAttempts));
+    } else {
+        emit errorOccurred("重连次数过多，停止自动重连");
     }
 }
 
-void IPCClientManager::onErrorOccurred(QAbstractSocket::SocketError error)
+void IPCClientManager::stopReconnectTimer()
 {
-    emit errorOccurred(socket->errorString());
-    
-    if (error != QAbstractSocket::RemoteHostClosedError && autoReconnect) {
-        reconnectTimer->start();
-    }
+    reconnectTimer->stop();
+    reconnectAttempts = 0;
 }
 
 void IPCClientManager::onReconnectTimeout()
 {
-    if (autoReconnect) {
-        socket->connectToHost(serverHost, serverPort);
+    if (m_autoReconnect) {
+        connectToServer();
     }
 }
 
-void IPCClientManager::processMessage(const QByteArray &message)
+void IPCClientManager::onClientConnected()
 {
-    try {
-        QJsonDocument doc = QJsonDocument::fromJson(message);
-        if (doc.isNull()) {
-            emit messageReceived(QString::fromUtf8(message));
-            return;
-        }
-        
-        QJsonObject json = doc.object();
-        QString type = json.contains("type") ? json["type"].toString() : "";
-        
-        if (json.contains("status")) {
-            // 这是响应消息
-            int status = json["status"].toInt();
-            QJsonObject data = QJsonDocument::fromJson(json["data"].toString().toUtf8()).object();
-            
-            switch (static_cast<ais::protocol::ResponseStatus>(status)) {
-            case ais::protocol::ResponseStatus::SUCCESS:
-                if (data.contains("is_running")) {
-                    handleServiceStatus(data);
-                } else if (data.contains("config")) {
-                    handleConfigResponse(data);
-                }
-                break;
-            default:
-                emit errorOccurred("命令执行失败");
-                break;
-            }
-        } else {
-            // 这是命令消息（服务端主动推送）
-            emit messageReceived(QString::fromUtf8(message));
-        }
-    } catch (...) {
-        emit messageReceived(QString::fromUtf8(message));
+    m_connected = true;
+    emit connectionStateChanged(true);
+    stopReconnectTimer();
+}
+
+void IPCClientManager::onClientDisconnected()
+{
+    m_connected = false;
+    emit connectionStateChanged(false);
+    
+    if (m_autoReconnect) {
+        startReconnectTimer();
     }
 }
 
-void IPCClientManager::sendCommand(const QJsonObject &command)
+void IPCClientManager::onClientError(const QString &errorMessage)
 {
-    if (!isConnected()) {
-        emit errorOccurred("未连接到服务");
-        return;
+    emit errorOccurred(errorMessage);
+    
+    if (m_autoReconnect && m_connected) {
+        startReconnectTimer();
+    }
+}
+
+void IPCClientManager::onClientMessageReceived(const QString &message)
+{
+    QVariantMap parsed = parseMessage(message);
+    
+    if (parsed.contains("type")) {
+        QString msgType = parsed["type"].toString();
+        if (msgType == "status_update") {
+            bool running = parsed["status"].toString() == "running";
+            emit serviceStateChanged(running);
+        } else if (msgType == "config_update") {
+            emit serviceConfigReceived(parsed["config"].toMap());
+        }
     }
     
-    QJsonDocument doc(command);
-    socket->write(doc.toJson(QJsonDocument::Compact) + "\n");
-}
-
-void IPCClientManager::handleServiceStatus(const QJsonObject &data)
-{
-    bool running = data["is_running"].toBool();
-    emit serviceStateChanged(running);
-}
-
-void IPCClientManager::handleConfigResponse(const QJsonObject &data)
-{
-    emit configUpdated(data);
+    emit messageReceived(message);
 }

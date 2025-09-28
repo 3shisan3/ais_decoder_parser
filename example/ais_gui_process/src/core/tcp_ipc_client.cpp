@@ -1,7 +1,7 @@
 #include "tcp_ipc_client.h"
-#include "logger_define.h"
 
 #include <system_error>
+#include <iostream>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -32,7 +32,7 @@ AISClient::AISClient()
     if (!winsockInitialized) {
         WSADATA wsaData;
         if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-            LOG_ERROR("WSAStartup failed");
+            std::cout << "WSAStartup failed" << std::endl;
         }
         winsockInitialized = true;
     }
@@ -89,7 +89,7 @@ bool AISClient::connectToServer(const std::string& host, int port)
     sendThread_ = std::thread(&AISClient::sendThread, this);
     
     setConnectionState(ConnectionState::CONNECTED);
-    LOG_INFO("Connected to server: {}:{}", host, port);
+    std::cout << "Connected to server: " << host << ":" << port << std::endl;
     return true;
 }
 
@@ -110,7 +110,7 @@ void AISClient::disconnect()
     while (!sendQueue_.empty()) sendQueue_.pop();
     
     setConnectionState(ConnectionState::DISCONNECTED);
-    LOG_INFO("Disconnected from server");
+    std::cout << "Disconnected from server" << std::endl;
 }
 
 bool AISClient::establishConnection(const std::string& host, int port)
@@ -316,7 +316,7 @@ void AISClient::processReceivedData(const char* data, size_t size)
                 continue;
             } catch (...) {}
             
-            LOG_WARNING("Unrecognized message: {}", message);
+            std::cout << "Unrecognized message: " << message << std::endl;
             
         } catch (const std::exception& e) {
             handleError("Message processing failed: " + std::string(e.what()));
