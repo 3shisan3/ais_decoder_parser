@@ -1,7 +1,24 @@
-#include "iostream"
+#include "ui/main_window.h"
 
-int main(int argc, char* argv[])
+#include <QApplication>
+#include <QStyleFactory>
+
+int main(int argc, char *argv[])
 {
-
-    return 0;
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication app(argc, argv);
+    
+    // 设置应用程序信息
+    QApplication::setApplicationName("AIS GUI Control");
+    QApplication::setApplicationVersion("1.0.0");
+    QApplication::setOrganizationName("SSZC");
+    
+    // 设置 Fusion 样式
+    QApplication::setStyle(QStyleFactory::create("Fusion"));
+    
+    // 创建主窗口
+    MainWindow mainWindow;
+    mainWindow.show();
+    
+    return app.exec();
 }
