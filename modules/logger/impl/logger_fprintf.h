@@ -40,7 +40,7 @@ static inline std::string getCurrentTime()
     return time_str;
 }
 
-namespace PROJECT_NAME::logger
+namespace LOGGER_PROJECT_NAME::logger
 {
 // 获取日志输出的文件流指针
 static inline FILE *getOutTarget()
@@ -109,8 +109,8 @@ static inline void logOutput(int level, const char *file, int line, const char *
 #define LOG_TRACE(...) \
     do { \
         if constexpr (LOG_LEVEL_TRACE >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_TRACE)) { \
-                PROJECT_NAME::logger::logOutput(LOG_LEVEL_TRACE, __FILE__, __LINE__, __VA_ARGS__); \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_TRACE)) { \
+                LOGGER_PROJECT_NAME::logger::logOutput(LOG_LEVEL_TRACE, __FILE__, __LINE__, __VA_ARGS__); \
             } \
         } \
     } while (false)
@@ -118,8 +118,8 @@ static inline void logOutput(int level, const char *file, int line, const char *
 #define LOG_DEBUG(...) \
     do { \
         if constexpr (LOG_LEVEL_DEBUG >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_DEBUG)) { \
-                PROJECT_NAME::logger::logOutput(LOG_LEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__); \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_DEBUG)) { \
+                LOGGER_PROJECT_NAME::logger::logOutput(LOG_LEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__); \
             } \
         } \
     } while (false)
@@ -127,8 +127,8 @@ static inline void logOutput(int level, const char *file, int line, const char *
 #define LOG_INFO(...) \
     do { \
         if constexpr (LOG_LEVEL_INFO >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_INFO)) { \
-                PROJECT_NAME::logger::logOutput(LOG_LEVEL_INFO, __FILE__, __LINE__, __VA_ARGS__); \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_INFO)) { \
+                LOGGER_PROJECT_NAME::logger::logOutput(LOG_LEVEL_INFO, __FILE__, __LINE__, __VA_ARGS__); \
             } \
         } \
     } while (false)
@@ -136,8 +136,8 @@ static inline void logOutput(int level, const char *file, int line, const char *
 #define LOG_WARNING(...) \
     do { \
         if constexpr (LOG_LEVEL_WARNING >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_WARNING)) { \
-                PROJECT_NAME::logger::logOutput(LOG_LEVEL_WARNING, __FILE__, __LINE__, __VA_ARGS__); \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_WARNING)) { \
+                LOGGER_PROJECT_NAME::logger::logOutput(LOG_LEVEL_WARNING, __FILE__, __LINE__, __VA_ARGS__); \
             } \
         } \
     } while (false)
@@ -145,8 +145,8 @@ static inline void logOutput(int level, const char *file, int line, const char *
 #define LOG_ERROR(...) \
     do { \
         if constexpr (LOG_LEVEL_ERROR >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_ERROR)) { \
-                PROJECT_NAME::logger::logOutput(LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__); \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_ERROR)) { \
+                LOGGER_PROJECT_NAME::logger::logOutput(LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__); \
             } \
         } \
     } while (false)
@@ -154,8 +154,8 @@ static inline void logOutput(int level, const char *file, int line, const char *
 #define LOG_CRITICAL(...) \
     do { \
         if constexpr (LOG_LEVEL_CRITICAL >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_CRITICAL)) { \
-                PROJECT_NAME::logger::logOutput(LOG_LEVEL_CRITICAL, __FILE__, __LINE__, __VA_ARGS__); \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_CRITICAL)) { \
+                LOGGER_PROJECT_NAME::logger::logOutput(LOG_LEVEL_CRITICAL, __FILE__, __LINE__, __VA_ARGS__); \
             } \
         } \
     } while (false)

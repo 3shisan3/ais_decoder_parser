@@ -29,7 +29,16 @@ file(GLOB_RECURSE AIS_COMMUNICATE_SOURCES "${CMAKE_CURRENT_LIST_DIR}/src/*.cpp")
 
 add_library(ais_parser_communicate STATIC ${AIS_COMMUNICATE_SOURCES})
 
-target_link_libraries(ais_parser_communicate PUBLIC
-    udp-tcp-communicate
+target_link_libraries(ais_parser_communicate
+    PUBLIC udp-tcp-communicate
+    PRIVATE ais_parser
+    PRIVATE logger
+)
+
+# 设置子项目特定的编译定义
+target_compile_definitions(ais_parser_communicate PRIVATE
+    LOGGER_PROJECT_NAME=AIS_PARSER_COMM
+    LOGGING_SCHEME_SPDLOG
+    GLOBAL_LOG_LEVEL=1  # DEBUG级别
 )
 

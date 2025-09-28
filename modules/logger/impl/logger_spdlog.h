@@ -26,7 +26,7 @@ Version history
 #define LOG_TRACE(...) \
     do { \
         if constexpr (LOG_LEVEL_TRACE >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_TRACE)) { \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_TRACE)) { \
                 SPDLOG_TRACE(__VA_ARGS__); \
             } \
         } \
@@ -35,7 +35,7 @@ Version history
 #define LOG_DEBUG(...) \
     do { \
         if constexpr (LOG_LEVEL_DEBUG >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_DEBUG)) { \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_DEBUG)) { \
                 SPDLOG_DEBUG(__VA_ARGS__); \
             } \
         } \
@@ -44,7 +44,7 @@ Version history
 #define LOG_INFO(...) \
     do { \
         if constexpr (LOG_LEVEL_INFO >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_INFO)) { \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_INFO)) { \
                 SPDLOG_INFO(__VA_ARGS__); \
             } \
         } \
@@ -53,7 +53,7 @@ Version history
 #define LOG_WARNING(...) \
     do { \
         if constexpr (LOG_LEVEL_WARNING >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_WARNING)) { \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_WARNING)) { \
                 SPDLOG_WARN(__VA_ARGS__); \
             } \
         } \
@@ -62,7 +62,7 @@ Version history
 #define LOG_ERROR(...) \
     do { \
         if constexpr (LOG_LEVEL_ERROR >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_ERROR)) { \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_ERROR)) { \
                 SPDLOG_ERROR(__VA_ARGS__); \
             } \
         } \
@@ -71,9 +71,10 @@ Version history
 #define LOG_CRITICAL(...) \
     do { \
         if constexpr (LOG_LEVEL_CRITICAL >= GLOBAL_LOG_LEVEL) { \
-            if (PROJECT_NAME::logger::shouldLog(LOG_LEVEL_CRITICAL)) { \
+            if (LOGGER_PROJECT_NAME::logger::shouldLog(LOG_LEVEL_CRITICAL)) { \
                 SPDLOG_CRITICAL(__VA_ARGS__); \
             } \
         } \
     } while (false)
 
+    

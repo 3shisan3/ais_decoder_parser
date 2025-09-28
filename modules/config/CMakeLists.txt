@@ -10,6 +10,6 @@ file(GLOB_RECURSE CONFIG_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 add_library(ais_config STATIC ${CONFIG_SOURCES})
 
 # 链接依赖库
-target_link_libraries(ais_config
+target_link_libraries(ais_config PRIVATE
     yaml-cpp
 )

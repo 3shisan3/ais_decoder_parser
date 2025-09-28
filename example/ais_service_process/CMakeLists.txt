@@ -1,7 +1,7 @@
 project(ais_decoder_parser)
 
 # 设置可执行程序输出路径
-set(EXCUTABLE_OUTPUT_PATH ${AIS_SOURCES_ROOT}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${AIS_SOURCES_ROOT}/bin)
 
 include(${CMAKE_MODULE_PATH}/IncludeDirectories_COMM.cmake)
 include_directories(
@@ -21,4 +21,5 @@ add_executable(ais_decoder_parser ${AIS_SERVICE_SOURCES})
 
 target_link_libraries(ais_decoder_parser
     PRIVATE ais_parser_communicate
+    PRIVATE ais_config
 )

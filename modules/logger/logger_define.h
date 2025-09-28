@@ -35,8 +35,9 @@ Version history
     #define GLOBAL_LOG_LEVEL LOG_LEVEL_INFO
 #endif
 
-#ifndef PROJECT_NAME
-    #define PROJECT_NAME system
+// 设置项目名称
+#ifndef LOGGER_PROJECT_NAME
+    #define LOGGER_PROJECT_NAME system
 #endif
 
 #ifdef ENABLE_LOGGING
@@ -46,7 +47,8 @@ Version history
 #else
     #include "logger_fprintf.h"
 #endif
-namespace PROJECT_NAME::logger
+
+namespace LOGGER_PROJECT_NAME::logger
 {
 // 运行时日志级别（初始化为编译时级别）
 static inline int &getRuntimeLevel()
