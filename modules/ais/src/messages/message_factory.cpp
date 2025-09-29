@@ -11,7 +11,7 @@ std::unique_ptr<AISMessage> MessageFactory::createMessage(BitBuffer &bits)
     if (bits.remaining() < 6)
         return nullptr;
 
-    int messageType = bits.getInt(0, 6);
+    int messageType = bits.getUInt32(0, 6);
     bits.setPosition(0);
 
     switch (static_cast<AISMessageType>(messageType))
@@ -83,20 +83,24 @@ std::unique_ptr<AISMessage> MessageFactory::parseType1(BitBuffer &bits)
     auto msg = std::make_unique<PositionReport>();
 
     msg->type = AISMessageType::POSITION_REPORT_CLASS_A;
-    msg->repeatIndicator = bits.getInt(6, 2);
+    msg->repeatIndicator = bits.getUInt32(6, 2);
     msg->mmsi = bits.getUInt32(8, 30);
-    msg->navigationStatus = bits.getInt(38, 4);
-    msg->rateOfTurn = bits.getInt(42, 8);
+    msg->navigationStatus = bits.getUInt32(38, 4);
+    msg->rateOfTurn = bits.getRateOfTurn(42, 8);
     msg->speedOverGround = bits.getSpeed(50, 10);
     msg->positionAccuracy = bits.getBool(60);
     msg->longitude = bits.getLongitude(61, 28);
     msg->latitude = bits.getLatitude(89, 27);
     msg->courseOverGround = bits.getCourse(116, 12);
-    msg->trueHeading = bits.getInt(128, 9);
-    msg->timestampUTC = bits.getInt(137, 6);
-    msg->specialManeuver = bits.getInt(143, 2);
+    msg->trueHeading = bits.getUInt32(128, 9);
+    msg->timestampUTC = bits.getUInt32(137, 6);
+    msg->specialManeuver = bits.getUInt32(143, 2);
+    
+    // 跳过spare位 (145-147)
+    bits.setPosition(148);
+
     msg->raimFlag = bits.getBool(148);
-    msg->communicationState = bits.getInt(149, 19);
+    msg->communicationState = bits.getUInt32(149, 19);
 
     return msg;
 }

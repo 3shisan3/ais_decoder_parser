@@ -157,6 +157,21 @@ public:
      * @return 航向值(度)
      */
     double getCourse(size_t length = 12);
+
+    /**
+     * @brief 获取指定位范围的转向率值
+     * @param start 起始位位置
+     * @param length 位数长度（通常为8）
+     * @return 转向率值(度/分钟)
+     */
+    double getRateOfTurn(size_t start, size_t length = 8);
+    
+    /**
+     * @brief 获取指定位范围的转向率值（从当前位置）
+     * @param length 位数长度（通常为8）
+     * @return 转向率值(度/分钟)
+     */
+    double getRateOfTurn(size_t length = 8);
     
     /**
      * @brief 跳过指定数量的位
@@ -185,6 +200,14 @@ private:
      * @param length 长度
      */
     void checkRange(size_t start, size_t length) const;
+
+    /**
+     * @brief 二进制补码转换
+     * @param value 原始值
+     * @param bits 位数
+     * @return 有符号整数值
+     */
+    int32_t fromTwosComplement(uint32_t value, size_t bits) const;
 };
 
 } // namespace ais

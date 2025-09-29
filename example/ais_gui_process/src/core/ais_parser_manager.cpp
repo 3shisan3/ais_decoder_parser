@@ -9,7 +9,7 @@ AISParserManager::AISParserManager(QObject *parent)
     : QObject(parent)
 {
     // 使用默认配置初始化解析器
-    m_config.validateChecksum = true;
+    m_config.validateChecksum = false;
     m_config.enableMultipartReassembly = true;
     m_config.maxMultipartAge = 300;
     

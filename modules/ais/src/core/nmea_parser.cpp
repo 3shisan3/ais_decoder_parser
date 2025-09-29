@@ -1,5 +1,5 @@
 #include "core/nmea_parser.h"
-#include "core/bit_buffer.h"  // 需要包含bit_buffer.h以使用charTo6Bit
+#include "core/bit_buffer.h"
 
 #include <algorithm>
 #include <sstream>
@@ -11,8 +11,8 @@ namespace ais
 
 bool NMEAParser::validateChecksum(const std::string &nmea)
 {
-    // 检查字符串是否以'$'开头
-    size_t start = nmea.find('$');
+    // 检查字符串是否以'$'或'!'开头
+    size_t start = nmea.find_first_of("$!");
     if (start == std::string::npos)
         return false;
 
@@ -21,7 +21,7 @@ bool NMEAParser::validateChecksum(const std::string &nmea)
     if (end == std::string::npos || end <= start + 1)
         return false;
 
-    // 提取'$'和'*'之间的数据部分
+    // 提取'$'/'!'和'*'之间的数据部分
     std::string data = nmea.substr(start + 1, end - start - 1);
     
     // 计算数据的异或校验和
@@ -48,25 +48,21 @@ bool NMEAParser::validateChecksum(const std::string &nmea)
 
 std::string NMEAParser::extractPayload(const std::string &nmea)
 {
-    // 查找第一个逗号
-    size_t start = nmea.find(',');
-    if (start == std::string::npos)
-        return "";
-
-    // 查找第二个逗号（负载开始位置）
-    start = nmea.find(',', start + 1);
-    if (start == std::string::npos)
-        return "";
-
-    start++; // 跳过第二个逗号，移动到负载开始位置
-    
-    // 查找校验和分隔符'*'，标识负载结束
-    size_t end = nmea.find('*', start);
-    if (end == std::string::npos)
-        return "";
-
-    // 提取负载部分
-    return nmea.substr(start, end - start);
+    auto parts = split(nmea, ',');
+    // AIVDM格式: !AIVDM,<片段总数>,<片段编号>,<序列号>,<信道>,<负载>,<填充位数>*<校验和>
+    // 负载在第六个字段（索引5）
+    if (parts.size() > 5 && !parts[5].empty())
+    {
+        std::string payload = parts[5];
+        // 移除可能存在的校验和部分
+        size_t asteriskPos = payload.find('*');
+        if (asteriskPos != std::string::npos)
+        {
+            payload = payload.substr(0, asteriskPos);
+        }
+        return payload;
+    }
+    return "";
 }
 
 std::string NMEAParser::decode6bitASCII(const std::string &payload)
@@ -92,6 +88,7 @@ std::string NMEAParser::decode6bitASCII(const std::string &payload)
 int NMEAParser::getFragmentCount(const std::string &nmea)
 {
     auto parts = split(nmea, ',');
+    // 片段总数在第二个字段（索引1）
     if (parts.size() > 1 && !parts[1].empty())
     {
         try
@@ -109,6 +106,7 @@ int NMEAParser::getFragmentCount(const std::string &nmea)
 int NMEAParser::getFragmentNumber(const std::string &nmea)
 {
     auto parts = split(nmea, ',');
+    // 片段编号在第三个字段（索引2）
     if (parts.size() > 2 && !parts[2].empty())
     {
         try
@@ -126,12 +124,9 @@ int NMEAParser::getFragmentNumber(const std::string &nmea)
 std::string NMEAParser::getMessageId(const std::string &nmea)
 {
     auto parts = split(nmea, ',');
-    // 字段4（索引3）包含AIS消息类型
-    if (parts.size() > 3 && !parts[3].empty())
-    {
-        return parts[3];
-    }
-    return ""; // 消息类型字段不存在或为空
+    // 消息类型在第四个字段（索引3），但实际AIS消息类型在负载的前6位
+    // 这里返回空字符串，实际消息类型从二进制数据中解析
+    return "";
 }
 
 std::vector<std::string> NMEAParser::split(const std::string &str, char delimiter)
