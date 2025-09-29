@@ -77,7 +77,7 @@ private:
     QString generateRandomMmsi();
     QString generateRandomCallsign();
     AisVesselInfo generateRandomVesselInfo();
-    QByteArray generateAisMessage(const AisVesselInfo &vessel, const QGeoCoordinate &position);
+    std::string generateAisMessage(const AisVesselInfo &vessel, const QGeoCoordinate &position);
     void logMessage(const QString &message);
 
     // UI组件

@@ -480,10 +480,15 @@ void MainWindow::onSendAisData()
             continue;
         }
         
-        QByteArray aisData = generateAisMessage(task.vesselInfo, task.vesselInfo.position);
-        if (!aisData.isEmpty()) {
+        std::string aisData = generateAisMessage(task.vesselInfo, task.vesselInfo.position);
+        if (!aisData.empty()) {
             // 发送UDP数据
-            qint64 bytesSent = m_udpSocket->writeDatagram(aisData, QHostAddress(m_udpHost), m_udpPort);
+            qint64 bytesSent = m_udpSocket->writeDatagram(
+                aisData.c_str(), 
+                static_cast<qint64>(aisData.size()),
+                QHostAddress(m_udpHost), 
+                m_udpPort
+            );
             
             if (bytesSent > 0) {
                 // 记录发送的AIS数据内容
@@ -505,7 +510,7 @@ void MainWindow::onSendAisData()
                     .arg(task.vesselInfo.speed, 0, 'f', 1);
                 
                 logmsg += QString("  数据: %1\n")
-                    .arg(QString(aisData));
+                    .arg(QString::fromStdString(aisData));
                 
                 logMessage(logmsg);
                 sentCount++;
@@ -624,7 +629,7 @@ uint8_t calculateChecksum(const QString &data)
     return checksum;
 }
 
-QByteArray MainWindow::generateAisMessage(const AisVesselInfo &vessel, const QGeoCoordinate &position)
+std::string MainWindow::generateAisMessage(const AisVesselInfo &vessel, const QGeoCoordinate &position)
 {
     // 创建BitBuffer来构建AIS消息的二进制数据
     std::vector<bool> bits;
@@ -654,30 +659,28 @@ QByteArray MainWindow::generateAisMessage(const AisVesselInfo &vessel, const QGe
     
     // 8. 经度 (28 bits) - 转换为AIS格式（1/10000分）
     double longitude = position.longitude();
-    int32_t lon = static_cast<int32_t>(std::round(longitude * 600000.0));
-    // 限制范围并处理边界情况
+    // 确保经度在有效范围内
     if (longitude > 180.0) longitude = 180.0;
     if (longitude < -180.0) longitude = -180.0;
-    lon = static_cast<int32_t>(std::round(longitude * 600000.0));
+    int32_t lon = static_cast<int32_t>(std::round(longitude * 600000.0));
     appendInt32(bits, lon, 28);
     
     // 9. 纬度 (27 bits) - 转换为AIS格式（1/10000分）
     double latitude = position.latitude();
-    int32_t lat = static_cast<int32_t>(std::round(latitude * 600000.0));
-    // 限制范围并处理边界情况
+    // 确保纬度在有效范围内
     if (latitude > 90.0) latitude = 90.0;
     if (latitude < -90.0) latitude = -90.0;
-    lat = static_cast<int32_t>(std::round(latitude * 600000.0));
+    int32_t lat = static_cast<int32_t>(std::round(latitude * 600000.0));
     appendInt32(bits, lat, 27);
     
-    // 10. 对地航向 (12 bits) - 度转换为AIS格式，3600表示不可用
+    // 10. 对地航向 (12 bits)
     uint32_t cog = static_cast<uint32_t>(std::round(vessel.heading * 10.0));
-    cog = std::min(cog, static_cast<uint32_t>(3599)); // 0-359.9度
+    cog = std::min(cog, static_cast<uint32_t>(3599));
     appendUInt32(bits, cog, 12);
     
     // 11. 真航向 (9 bits) - 511表示不可用
     uint32_t trueHeading = static_cast<uint32_t>(std::round(vessel.heading));
-    trueHeading = std::min(trueHeading, static_cast<uint32_t>(359)); // 0-359度
+    trueHeading = std::min(trueHeading, static_cast<uint32_t>(359));
     appendUInt32(bits, trueHeading, 9);
     
     // 12. 时间戳 (6 bits) - 当前UTC时间的秒部分，60表示不可用
@@ -697,20 +700,18 @@ QByteArray MainWindow::generateAisMessage(const AisVesselInfo &vessel, const QGe
     // 同步状态 + 通信状态
     appendUInt32(bits, 0, 2); // 同步状态：UTC直接
     appendUInt32(bits, 0, 3); // 通信状态：默认
-    
-    // 填充剩余的14位
-    appendUInt32(bits, 0, 14);
+    appendUInt32(bits, 0, 14); // 填充
     
     // 将二进制数据转换为6-bit ASCII
     std::string payload = binaryTo6bitAscii(bits);
     
-    // 构建完整的NMEA消息
+    // 构建完整的NMEA消息 - 使用标准格式
     QString dataPart = QString("AIVDM,1,1,,A,%1,0").arg(QString::fromStdString(payload));
     uint8_t checksum = calculateChecksum(dataPart);
     
-    QString nmeaMessage = QString("!%1*%2")
+    QString nmeaMessage = QString("$%1*%2\r\n")
         .arg(dataPart)
         .arg(checksum, 2, 16, QLatin1Char('0')).toUpper();
     
-    return nmeaMessage.toUtf8();
+    return nmeaMessage.toStdString();
 }

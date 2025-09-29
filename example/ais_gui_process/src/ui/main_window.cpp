@@ -1,6 +1,7 @@
 #include "main_window.h"
 
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QMenuBar>
 #include <QMenu>
 #include <QAction>
@@ -202,12 +203,18 @@ void MainWindow::connectSignals()
             this, &MainWindow::onConnectionStateChanged);
     connect(ipcClientManager, &IPCClientManager::messageReceived,
             this, &MainWindow::onMessageReceived);
+    connect(ipcClientManager, &IPCClientManager::rawMessageReceived,
+            messageDisplayPanel, &MessageDisplayPanel::addMessage);
     connect(ipcClientManager, &IPCClientManager::serviceStateChanged,
             this, &MainWindow::onServiceStateChanged);
     connect(ipcClientManager, &IPCClientManager::serviceConfigReceived,
             serviceControlPanel, &ServiceControlPanel::updateServiceConfig);
     connect(ipcClientManager, &IPCClientManager::errorOccurred,
             this, &MainWindow::onErrorOccurred);
+    connect(ipcClientManager, &IPCClientManager::aisMessageReceived,
+            this, &MainWindow::onAisMessageReceived);
+    connect(ipcClientManager, &IPCClientManager::rawAisMessageReceived,
+            this, &MainWindow::onRawAisMessageReceived);
     
     // 连接服务控制面板信号
     connect(serviceControlPanel, &ServiceControlPanel::configChanged,
@@ -282,6 +289,37 @@ void MainWindow::onMessageReceived(const QString &message)
 {
     QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
     messageDisplayPanel->addMessage(timestamp + " - " + message);
+}
+
+void MainWindow::onAisMessageReceived(const QString &rawData, const QString &processedData)
+{
+    // 处理AIS消息，可以显示在专门的AIS消息面板或记录到文件
+    QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+    QString aisMsg = QString("%1 - AIS消息\n原始数据: %2\n处理数据: %3")
+                    .arg(timestamp)
+                    .arg(rawData.left(100))  // 限制长度防止过长
+                    .arg(processedData.left(100));
+    
+    messageDisplayPanel->addMessage(aisMsg);
+    
+    // 更新状态栏显示
+    statusBar()->showMessage(QString("收到AIS消息 - 原始长度: %1, 处理长度: %2")
+                           .arg(rawData.length())
+                           .arg(processedData.length()), 3000);
+}
+
+void MainWindow::onRawAisMessageReceived(const QString &rawData)
+{
+    // 处理原始AIS消息
+    QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
+    QString aisMsg = QString("%1 - 原始AIS数据: %2")
+                    .arg(timestamp)
+                    .arg(rawData.left(150));  // 限制长度防止过长
+    
+    messageDisplayPanel->addMessage(aisMsg);
+    
+    // 更新状态栏显示
+    statusBar()->showMessage(QString("收到原始AIS数据 - 长度: %1").arg(rawData.length()), 3000);
 }
 
 void MainWindow::onConnectionStateChanged(bool connected)

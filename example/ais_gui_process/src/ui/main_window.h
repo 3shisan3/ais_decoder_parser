@@ -26,6 +26,8 @@ protected:
 private slots:
     void onServiceStateChanged(bool running);
     void onMessageReceived(const QString &message);
+    void onAisMessageReceived(const QString &rawData, const QString &processedData);
+    void onRawAisMessageReceived(const QString &rawData);
     void onConnectionStateChanged(bool connected);
     void onSystemTrayActivated(QSystemTrayIcon::ActivationReason reason);
     void showWindow();

@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <cstdint>
 
 #include "core/tcp_ipc_client.h"
 #include "core/ais_parser_manager.h"
@@ -31,7 +32,7 @@ public:
     QString serverAddress() const;
     quint16 serverPort() const;
 
-    // 服务控制命令
+    // 服务控制命令 - 使用protocol定义的消息类型
     void sendStartCommand();
     void sendStopCommand();
     void getServiceStatus();
@@ -44,24 +45,28 @@ public:
 
 signals:
     void connectionStateChanged(bool connected);
-    void messageReceived(const QString &message);
+    void messageReceived(const QString &message);           // 格式化后的消息
+    void rawMessageReceived(const QString &message);        // 原始数据消息
     void serviceStateChanged(bool running);
     void serviceConfigReceived(const QVariantMap &config);
     void errorOccurred(const QString &errorMessage);
+    void aisMessageReceived(const QString &rawData, const QString &processedData);
+    void rawAisMessageReceived(const QString &rawData);     // 原始AIS数据
 
 private slots:
-    void onClientConnected();
-    void onClientDisconnected();
-    void onClientError(const QString &errorMessage);
-    void onClientMessageReceived(const QString &message);
     void onReconnectTimeout();
 
 private:
     void initializeClient();
     QVariantMap parseMessage(const QString &message);
-    void sendCommand(const QVariantMap &command);
+    void sendProtocolCommand(const ais::protocol::CommandMessage &cmd);
     void startReconnectTimer();
     void stopReconnectTimer();
+    uint32_t generateSequence();
+    
+    // 消息处理辅助方法
+    void handleAISMessage(const ais::protocol::CommandMessage &cmd);
+    void handleConfigUpdate(const ais::protocol::CommandMessage &cmd);
 
     ais::AISClient *ipcClient;
     AISParserManager *parserManager;

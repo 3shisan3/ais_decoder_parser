@@ -39,40 +39,102 @@ void IPCClientManager::initializeClient()
     
     ipcClient = new ais::AISClient();
     
-    // 设置消息处理器
+    // 设置消息处理器 - 基于CommandType枚举进行处理
     ipcClient->setMessageHandler([this](const ais::protocol::CommandMessage &cmd) {
-        QString message = QString::fromStdString(cmd.toJson());
-        QVariantMap parsed = parseMessage(message);
-        
-        // 处理不同类型的消息
-        if (parsed.contains("type")) {
-            QString msgType = parsed["type"].toString();
-            if (msgType == "status_update") {
-                bool running = parsed["status"].toString() == "running";
-                emit serviceStateChanged(running);
-            } else if (msgType == "log_message") {
-                QString logMsg = parsed["message"].toString();
-                emit messageReceived(logMsg);
+        try {
+            // 记录接收到的消息基本信息
+            QString msgInfo = QString("收到消息 - 类型: %1, 序列号: %2")
+                            .arg(static_cast<int>(cmd.type))
+                            .arg(cmd.sequence);
+            emit messageReceived(msgInfo);
+            
+            // 根据CommandType进行不同的处理
+            switch (cmd.type) {
+            case ais::protocol::CommandType::GET_STATUS:
+                // 状态查询消息，通常不需要特殊处理
+                emit messageReceived("收到状态查询消息");
+                break;
+                
+            case ais::protocol::CommandType::START_SERVICE:
+                // 服务启动消息
+                emit messageReceived("收到服务启动消息");
+                break;
+                
+            case ais::protocol::CommandType::STOP_SERVICE:
+                // 服务停止消息
+                emit messageReceived("收到服务停止消息");
+                break;
+                
+            case ais::protocol::CommandType::GET_SHIP_COUNT:
+                // 获取船舶数量消息
+                emit messageReceived("收到获取船舶数量消息");
+                break;
+                
+            case ais::protocol::CommandType::SEND_MESSAGE:
+                // AIS数据消息 - 这是最重要的消息类型
+                handleAISMessage(cmd);
+                break;
+                
+            case ais::protocol::CommandType::CONFIG_UPDATE:
+                // 配置更新消息
+                handleConfigUpdate(cmd);
+                break;
+                
+            case ais::protocol::CommandType::GET_MESSAGE_STATS:
+                // 消息统计查询
+                emit messageReceived("收到消息统计查询");
+                break;
+                
+            default:
+                // 未知消息类型
+                emit messageReceived(QString("收到未知类型消息: %1").arg(static_cast<int>(cmd.type)));
+                break;
             }
+            
+            // 无论什么类型的消息，都发送原始数据用于显示
+            emit rawMessageReceived(QString::fromStdString(cmd.data));
+            
+        } catch (const std::exception &e) {
+            QString errorMsg = QString("消息处理异常: %1").arg(e.what());
+            emit errorOccurred(errorMsg);
         }
-        
-        emit messageReceived(QString("收到消息: %1").arg(message));
     });
     
     // 设置响应处理器
     ipcClient->setResponseHandler([this](const ais::protocol::ResponseMessage &response) {
-        QVariantMap result = parseMessage(QString::fromStdString(response.toJson()));
-        
-        if (result.contains("status")) {
-            emit serviceStateChanged(result["status"].toString() == "running");
-        }
-        
-        if (result.contains("config")) {
-            emit serviceConfigReceived(result["config"].toMap());
-        }
-        
-        if (result.contains("error")) {
-            emit errorOccurred(result["error"].toString());
+        try {
+            // 记录响应消息
+            QString responseMsg = QString("收到响应 - 状态: %1, 序列号: %2")
+                                 .arg(static_cast<int>(response.status))
+                                 .arg(response.sequence);
+            emit messageReceived(responseMsg);
+            
+            // 处理响应状态
+            if (response.status == ais::protocol::ResponseStatus::SUCCESS) {
+                // 成功响应，尝试解析数据
+                if (!response.data.empty()) {
+                    QVariantMap result = parseMessage(QString::fromStdString(response.data));
+                    if (result.contains("status")) {
+                        emit serviceStateChanged(result["status"].toBool());
+                    }
+                    if (result.contains("config")) {
+                        emit serviceConfigReceived(result["config"].toMap());
+                    }
+                    if (result.contains("ship_count")) {
+                        emit messageReceived(QString("船舶数量: %1").arg(result["ship_count"].toInt()));
+                    }
+                }
+            } else {
+                // 错误响应
+                QString errorInfo = QString::fromStdString(response.data);
+                emit errorOccurred(QString("服务响应错误: %1").arg(errorInfo));
+            }
+            
+            // 发送原始响应数据
+            emit rawMessageReceived(QString::fromStdString(response.data));
+            
+        } catch (const std::exception &e) {
+            emit errorOccurred(QString("响应处理异常: %1").arg(e.what()));
         }
     });
     
@@ -86,6 +148,50 @@ void IPCClientManager::initializeClient()
             startReconnectTimer();
         }
     });
+}
+
+// 处理AIS消息
+void IPCClientManager::handleAISMessage(const ais::protocol::CommandMessage &cmd)
+{
+    try {
+        // 尝试解析AIS消息数据
+        QVariantMap data = parseMessage(QString::fromStdString(cmd.data));
+        
+        if (data.contains("raw_data") && data.contains("processed_data")) {
+            // 标准AIS消息格式
+            QString rawData = data["raw_data"].toString();
+            QString processedData = data["processed_data"].toString();
+            
+            emit messageReceived(QString("AIS数据 - 原始: %1...").arg(rawData.left(50)));
+            emit aisMessageReceived(rawData, processedData);
+            
+        } else if (!cmd.data.empty()) {
+            // 非标准格式，但包含数据
+            emit messageReceived(QString("AIS数据(原始): %1...").arg(QString::fromStdString(cmd.data).left(50)));
+            emit rawAisMessageReceived(QString::fromStdString(cmd.data));
+            
+        } else {
+            // 空数据
+            emit messageReceived("收到空的AIS消息");
+        }
+        
+    } catch (const std::exception &e) {
+        emit errorOccurred(QString("AIS消息处理失败: %1").arg(e.what()));
+    }
+}
+
+// 处理配置更新消息
+void IPCClientManager::handleConfigUpdate(const ais::protocol::CommandMessage &cmd)
+{
+    try {
+        if (!cmd.data.empty()) {
+            QVariantMap config = parseMessage(QString::fromStdString(cmd.data));
+            emit serviceConfigReceived(config);
+            emit messageReceived("收到配置更新消息");
+        }
+    } catch (const std::exception &e) {
+        emit errorOccurred(QString("配置更新处理失败: %1").arg(e.what()));
+    }
 }
 
 bool IPCClientManager::connectToServer()
@@ -110,10 +216,14 @@ bool IPCClientManager::connectToServer(const QString &address, quint16 port)
             m_serverPort = port;
             reconnectAttempts = 0;
             emit connectionStateChanged(true);
+            
+            // 发送连接成功消息
+            emit messageReceived(QString("成功连接到服务: %1:%2").arg(address).arg(port));
             return true;
         }
     } catch (const std::exception &e) {
-        emit errorOccurred(QString("连接失败: %1").arg(e.what()));
+        QString errorMsg = QString("连接失败: %1").arg(e.what());
+        emit errorOccurred(errorMsg);
     }
     
     // 连接失败，启动重连定时器
@@ -132,6 +242,7 @@ void IPCClientManager::disconnectFromServer()
         ipcClient->disconnect();
         m_connected = false;
         emit connectionStateChanged(false);
+        emit messageReceived("已断开与服务连接");
     }
 }
 
@@ -162,64 +273,72 @@ quint16 IPCClientManager::serverPort() const
 
 void IPCClientManager::sendStartCommand()
 {
-    QVariantMap command;
-    command["type"] = "control";
-    command["action"] = "start";
-    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    ais::protocol::CommandMessage cmd;
+    cmd.type = ais::protocol::CommandType::START_SERVICE;
+    cmd.sequence = generateSequence();
+    cmd.data = R"({"action": "start"})";
     
-    sendCommand(command);
+    sendProtocolCommand(cmd);
 }
 
 void IPCClientManager::sendStopCommand()
 {
-    QVariantMap command;
-    command["type"] = "control";
-    command["action"] = "stop";
-    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    ais::protocol::CommandMessage cmd;
+    cmd.type = ais::protocol::CommandType::STOP_SERVICE;
+    cmd.sequence = generateSequence();
+    cmd.data = R"({"action": "stop"})";
     
-    sendCommand(command);
+    sendProtocolCommand(cmd);
 }
 
 void IPCClientManager::getServiceStatus()
 {
-    QVariantMap command;
-    command["type"] = "query";
-    command["action"] = "status";
-    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    ais::protocol::CommandMessage cmd;
+    cmd.type = ais::protocol::CommandType::GET_STATUS;
+    cmd.sequence = generateSequence();
+    cmd.data = "{}";
     
-    sendCommand(command);
+    sendProtocolCommand(cmd);
 }
 
 void IPCClientManager::getServiceConfig()
 {
-    QVariantMap command;
-    command["type"] = "query";
-    command["action"] = "config";
-    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    ais::protocol::CommandMessage cmd;
+    cmd.type = ais::protocol::CommandType::CONFIG_UPDATE;
+    cmd.sequence = generateSequence();
+    cmd.data = R"({"action": "get_config"})";
     
-    sendCommand(command);
+    sendProtocolCommand(cmd);
 }
 
 void IPCClientManager::updateServiceConfig(const QVariantMap &config)
 {
-    QVariantMap command;
-    command["type"] = "control";
-    command["action"] = "update_config";
-    command["config"] = config;
-    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    QJsonDocument doc(QJsonObject::fromVariantMap(config));
+    QString jsonStr = doc.toJson(QJsonDocument::Compact);
     
-    sendCommand(command);
+    ais::protocol::CommandMessage cmd;
+    cmd.type = ais::protocol::CommandType::CONFIG_UPDATE;
+    cmd.sequence = generateSequence();
+    cmd.data = jsonStr.toStdString();
+    
+    sendProtocolCommand(cmd);
 }
 
 void IPCClientManager::sendCustomCommand(const QString &commandType, const QVariantMap &params)
 {
     QVariantMap command;
-    command["type"] = "custom";
     command["action"] = commandType;
     command["params"] = params;
-    command["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
     
-    sendCommand(command);
+    QJsonDocument doc(QJsonObject::fromVariantMap(command));
+    QString jsonStr = doc.toJson(QJsonDocument::Compact);
+    
+    ais::protocol::CommandMessage cmd;
+    cmd.type = ais::protocol::CommandType::GET_MESSAGE_STATS; // 使用统计类型作为自定义命令
+    cmd.sequence = generateSequence();
+    cmd.data = jsonStr.toStdString();
+    
+    sendProtocolCommand(cmd);
 }
 
 AISParserManager* IPCClientManager::getParserManager() const
@@ -227,7 +346,7 @@ AISParserManager* IPCClientManager::getParserManager() const
     return parserManager;
 }
 
-void IPCClientManager::sendCommand(const QVariantMap &command)
+void IPCClientManager::sendProtocolCommand(const ais::protocol::CommandMessage &cmd)
 {
     if (!isConnected()) {
         emit errorOccurred("未连接到服务器");
@@ -235,9 +354,12 @@ void IPCClientManager::sendCommand(const QVariantMap &command)
     }
     
     try {
-        QJsonDocument doc(QJsonObject::fromVariantMap(command));
-        QString jsonStr = doc.toJson(QJsonDocument::Compact);
-        ipcClient->sendCommand(jsonStr.toStdString());
+        // 记录发送的命令
+        emit messageReceived(QString("发送命令 - 类型: %1, 序列号: %2")
+                           .arg(static_cast<int>(cmd.type))
+                           .arg(cmd.sequence));
+        
+        ipcClient->sendCommand(cmd);
     } catch (const std::exception &e) {
         emit errorOccurred(QString("发送命令失败: %1").arg(e.what()));
     }
@@ -247,17 +369,30 @@ QVariantMap IPCClientManager::parseMessage(const QString &message)
 {
     QVariantMap result;
     
+    if (message.trimmed().isEmpty()) {
+        return result;
+    }
+    
     try {
         QJsonDocument doc = QJsonDocument::fromJson(message.toUtf8());
         if (!doc.isNull() && doc.isObject()) {
             result = doc.object().toVariantMap();
+        } else {
+            // 如果不是JSON，将整个消息作为原始文本
+            result["raw_text"] = message;
         }
     } catch (...) {
         // 解析失败，返回原始消息
-        result["raw"] = message;
+        result["raw_text"] = message;
     }
     
     return result;
+}
+
+uint32_t IPCClientManager::generateSequence()
+{
+    static uint32_t sequence = 0;
+    return ++sequence;
 }
 
 void IPCClientManager::startReconnectTimer()
@@ -282,58 +417,4 @@ void IPCClientManager::onReconnectTimeout()
     if (m_autoReconnect) {
         connectToServer();
     }
-}
-
-void IPCClientManager::onClientConnected()
-{
-    m_connected = true;
-    emit connectionStateChanged(true);
-    // 连接成功时认为服务在运行
-    emit serviceStateChanged(true);
-
-    stopReconnectTimer();
-}
-
-void IPCClientManager::onClientDisconnected()
-{
-    m_connected = false;
-    emit connectionStateChanged(false);
-
-    // 断开连接时服务停止
-    emit serviceStateChanged(false);
-    
-    if (m_autoReconnect) {
-        startReconnectTimer();
-    }
-}
-
-void IPCClientManager::onClientError(const QString &errorMessage)
-{
-    emit errorOccurred(errorMessage);
-    
-    if (m_autoReconnect && m_connected) {
-        startReconnectTimer();
-    }
-}
-
-void IPCClientManager::onClientMessageReceived(const QString &message)
-{
-    QVariantMap parsed = parseMessage(message);
-
-    // 只要收到任何消息且连接正常，就认为服务在运行中
-    if (m_connected) {
-        emit serviceStateChanged(true);
-    }
-    
-    if (parsed.contains("type")) {
-        QString msgType = parsed["type"].toString();
-        if (msgType == "status_update") {
-            bool running = parsed["status"].toString() == "running";
-            emit serviceStateChanged(running);
-        } else if (msgType == "config_update") {
-            emit serviceConfigReceived(parsed["config"].toMap());
-        }
-    }
-    
-    emit messageReceived(message);
 }
