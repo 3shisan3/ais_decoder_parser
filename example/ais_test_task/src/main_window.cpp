@@ -29,6 +29,12 @@ MainWindow::MainWindow(QWidget *parent)
     , m_udpPort(10110)
     , m_sendInterval(1000)
 {
+    // 初始化communicate API
+    int ret = communicate::Initialize();
+    if (ret != 0) {
+        QMessageBox::warning(this, "警告", "通信模块初始化失败");
+    }
+    
     setupUi();
     setupConnections();
     
@@ -41,9 +47,6 @@ MainWindow::MainWindow(QWidget *parent)
     m_sendingTimer->setInterval(m_sendInterval);
     connect(m_sendingTimer, &QTimer::timeout, this, &MainWindow::onSendAisData);
     
-    // 初始化UDP socket
-    m_udpSocket = new QUdpSocket(this);
-    
     m_generationTimer->start();
     m_sendingTimer->start();
     
@@ -55,7 +58,8 @@ MainWindow::~MainWindow()
 {
     m_generationTimer->stop();
     m_sendingTimer->stop();
-    m_udpSocket->close();
+
+    communicate::Destroy();
 }
 
 void MainWindow::setupUi()
@@ -482,15 +486,15 @@ void MainWindow::onSendAisData()
         
         std::string aisData = generateAisMessage(task.vesselInfo, task.vesselInfo.position);
         if (!aisData.empty()) {
-            // 发送UDP数据
-            qint64 bytesSent = m_udpSocket->writeDatagram(
-                aisData.c_str(), 
-                static_cast<qint64>(aisData.size()),
-                QHostAddress(m_udpHost), 
-                m_udpPort
+            // 使用communicate API发送数据
+            int ret = communicate::SendGeneralMessage(
+                m_udpHost.toUtf8().constData(),
+                m_udpPort,
+                const_cast<char*>(aisData.c_str()),
+                aisData.size()
             );
             
-            if (bytesSent > 0) {
+            if (ret == 0) {
                 // 记录发送的AIS数据内容
                 QString logmsg = QString("[%1] 发送AIS数据到 %2:%3\n")
                     .arg(currentTime.toString("hh:mm:ss.zzz"))
@@ -515,10 +519,11 @@ void MainWindow::onSendAisData()
                 logMessage(logmsg);
                 sentCount++;
             } else {
-                logMessage(QString("[%1] UDP发送失败到 %2:%3")
+                logMessage(QString("[%1] 发送失败到 %2:%3, 错误码: %4")
                     .arg(currentTime.toString("hh:mm:ss.zzz"))
                     .arg(m_udpHost)
-                    .arg(m_udpPort));
+                    .arg(m_udpPort)
+                    .arg(ret));
             }
         }
     }
@@ -527,33 +532,6 @@ void MainWindow::onSendAisData()
         m_statusLabel->setText(QString("已发送 %1 条AIS数据").arg(sentCount));
     }
 }
-
-// QByteArray MainWindow::generateAisMessage(const AisVesselInfo &vessel, const QGeoCoordinate &position)
-// {
-//     // 简化的AIS消息生成（模拟AIS消息类型1：位置报告）
-//     QString aisMessage = QString("!AIVDM,1,1,,A,%1,%2,%3,%4,%5,%6,%7,%8")
-//         .arg(vessel.mmsi)
-//         .arg(position.latitude(), 0, 'f', 6)
-//         .arg(position.longitude(), 0, 'f', 6)
-//         .arg(vessel.heading, 0, 'f', 1)
-//         .arg(vessel.speed, 0, 'f', 1)
-//         .arg(vessel.heading, 0, 'f', 1)
-//         .arg(QDateTime::currentDateTimeUtc().toString("yyMMddhhmm"))
-//         .arg(vessel.vesselName);
-    
-//     return aisMessage.toUtf8();
-// }
-
-void MainWindow::logMessage(const QString &message)
-{
-    m_logTextEdit->append(message);
-    // 自动滚动到底部
-    QTextCursor cursor = m_logTextEdit->textCursor();
-    cursor.movePosition(QTextCursor::End);
-    m_logTextEdit->setTextCursor(cursor);
-}
-
-
 
 // 辅助函数：添加无符号32位整数到比特流（修正比特顺序）
 void appendUInt32(std::vector<bool> &bits, uint32_t value, size_t length)
@@ -714,4 +692,13 @@ std::string MainWindow::generateAisMessage(const AisVesselInfo &vessel, const QG
         .arg(checksum, 2, 16, QLatin1Char('0')).toUpper();
     
     return nmeaMessage.toStdString();
+}
+
+void MainWindow::logMessage(const QString &message)
+{
+    m_logTextEdit->append(message);
+    // 自动滚动到底部
+    QTextCursor cursor = m_logTextEdit->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    m_logTextEdit->setTextCursor(cursor);
 }

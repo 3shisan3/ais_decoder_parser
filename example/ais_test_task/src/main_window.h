@@ -17,6 +17,7 @@
 #include <QGroupBox>
 
 #include "map/multi_mapview.h"
+#include "udp-tcp-communicate/communicate_api.h"
 
 // AIS船舶信息结构
 struct AisVesselInfo {
@@ -100,7 +101,6 @@ private:
     QList<AisGenerationTask> m_aisTasks;
     QTimer *m_generationTimer;
     QTimer *m_sendingTimer;
-    QUdpSocket *m_udpSocket;
     
     // 网络设置
     QString m_udpHost;
