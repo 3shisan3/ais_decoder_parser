@@ -1,11 +1,28 @@
 #include "core/bit_buffer.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 
 namespace ais
 {
+
+constexpr std::array<uint8_t, 256> initToSixbit() {
+    std::array<uint8_t, 256> table{};
+    for (int chr = 0; chr < 256; chr++) {
+        if (chr < 48 || chr > 119 || (chr > 87 && chr < 96)) {
+            table[chr] = 0xFF; // -1 (invalid)
+        } else if (chr < 0x60) { // chr < 96
+            table[chr] = (chr - 48) & 0x3F; // 0-63
+        } else {
+            table[chr] = (chr - 56) & 0x3F; // 0-63
+        }
+    }
+    return table;
+}
+
+constexpr auto toSixbit = initToSixbit();
 
 BitBuffer::BitBuffer(const std::string &binaryData)
 {
@@ -256,14 +273,7 @@ void BitBuffer::skip(size_t bits)
 
 int BitBuffer::charTo6Bit(char c)
 {
-    if (c >= 48 && c <= 87) // '0' to 'W'
-    {
-        int value = c - 48;
-        if (value > 40)     // 处理特殊字符范围
-            value -= 8;
-        return value & 0x3F;
-    }
-    return 0;               // 无效字符
+    return toSixbit[c];
 }
 
 char BitBuffer::bit6ToChar(int value)

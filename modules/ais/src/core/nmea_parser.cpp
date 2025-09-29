@@ -69,16 +69,13 @@ std::string NMEAParser::decode6bitASCII(const std::string &payload)
 {
     std::string binaryData;
     
-    // 遍历负载中的每个字符
-    for (char c : payload)
-    {
-        // 将6-bit ASCII字符转换为0-63的整数值
+    for (char c : payload) {
+        // 正确的6-bit ASCII到二进制转换
         int value = BitBuffer::charTo6Bit(c);
         
-        // 将6位值转换为6个二进制字符（'0'或'1'）
-        for (int i = 5; i >= 0; i--)
-        {
-            binaryData += ((value & (1 << i)) != 0) ? '1' : '0';
+        // 正确的位序：从最高位到最低位
+        for (int i = 5; i >= 0; i--) {
+            binaryData += (value & (1 << i)) ? '1' : '0';
         }
     }
     
