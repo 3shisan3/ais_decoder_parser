@@ -31,6 +31,7 @@ QVariantMap AISParserManager::parseNMEAString(const QString &nmeaString)
 {
     QVariantMap result;
 
+    result["rawNMEA"] = nmeaString;
     if (!m_parser) {
         result["success"] = false;
         result["error"] = "Parser not initialized";
@@ -46,7 +47,6 @@ QVariantMap AISParserManager::parseNMEAString(const QString &nmeaString)
             result["success"] = true;
             result["type"] = static_cast<int>(message->type);
             result["mmsi"] = static_cast<quint32>(message->mmsi);
-            result["rawNMEA"] = QString::fromStdString(message->rawNMEA);
             result["timestamp"] = QString::fromStdString(message->timestamp);
             result["json"] = QString::fromStdString(message->toJson());
             result["csv"] = QString::fromStdString(message->toCsv());

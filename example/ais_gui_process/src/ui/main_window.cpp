@@ -16,7 +16,7 @@ MainWindow::MainWindow(QWidget *parent)
     , connectedToService(false)
 {
     setWindowTitle("AIS GUI Control - 未连接");
-    setMinimumSize(1200, 800);
+    setMinimumSize(800, 600);
     
     // 加载设置
     loadSettings();

@@ -288,6 +288,9 @@ void IPCClientManager::onClientConnected()
 {
     m_connected = true;
     emit connectionStateChanged(true);
+    // 连接成功时认为服务在运行
+    emit serviceStateChanged(true);
+
     stopReconnectTimer();
 }
 
@@ -295,6 +298,9 @@ void IPCClientManager::onClientDisconnected()
 {
     m_connected = false;
     emit connectionStateChanged(false);
+
+    // 断开连接时服务停止
+    emit serviceStateChanged(false);
     
     if (m_autoReconnect) {
         startReconnectTimer();
@@ -313,6 +319,11 @@ void IPCClientManager::onClientError(const QString &errorMessage)
 void IPCClientManager::onClientMessageReceived(const QString &message)
 {
     QVariantMap parsed = parseMessage(message);
+
+    // 只要收到任何消息且连接正常，就认为服务在运行中
+    if (m_connected) {
+        emit serviceStateChanged(true);
+    }
     
     if (parsed.contains("type")) {
         QString msgType = parsed["type"].toString();

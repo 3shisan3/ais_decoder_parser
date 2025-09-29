@@ -1,7 +1,7 @@
 project(ais_decoder_parser)
 
 # 设置可执行程序输出路径
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${AIS_SOURCES_ROOT}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${AIS_SOURCES_ROOT}/bin/ais_decoder_parser)
 
 include(${CMAKE_MODULE_PATH}/IncludeDirectories_COMM.cmake)
 include_directories(

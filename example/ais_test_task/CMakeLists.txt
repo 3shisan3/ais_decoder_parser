@@ -1,4 +1,4 @@
-project(ais_decoder_parser_ui)
+project(ais_test_task)
 
 # 设置默认的 Qt 目录
 set(QT_PREFIX_PATH "D:\\Dev\\Qt\\6.8.3\\mingw_64" CACHE PATH "Default Qt install path")
@@ -15,58 +15,41 @@ list(APPEND CMAKE_PREFIX_PATH ${QT_PREFIX_PATH})
 set(CMAKE_AUTOMOC ON)
 
 # 查找Qt依赖
-find_package(Qt6 COMPONENTS Core Widgets Gui REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets Gui Network Positioning REQUIRED)
 
 # 设置Qt的依赖库
 set(QT_DEPEND_LIBS
     Qt6::Core
     Qt6::Widgets
     Qt6::Gui
+    Qt6::Network
+    Qt6::Positioning
 )
 
 # 设置可执行程序输出路径
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${AIS_SOURCES_ROOT}/bin/ais_decoder_parser_ui)
-
-# 引入 Qt 会干扰 CMAKE_MODULE_PATH
-include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_CFG.cmake)
-include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_AIS.cmake)
-include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_LOG.cmake)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${AIS_SOURCES_ROOT}/bin/ais_test_task)
 
 include_directories(
-    ${AIS_SOURCES_ROOT}/example/ais_ipc
-    
     ${CMAKE_CURRENT_LIST_DIR}/src
 )
 
-file(GLOB_RECURSE AIS_GUI_SOURCES
-    ${AIS_SOURCES_ROOT}/example/ais_ipc/*.cpp
-
+file(GLOB_RECURSE AIS_TEST_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/main_gui.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/main.cpp
 )
 
-add_executable(ais_decoder_parser_ui WIN32 ${AIS_GUI_SOURCES})
+add_executable(ais_test_task WIN32 ${AIS_TEST_SOURCES})
 
-target_link_libraries(ais_decoder_parser_ui
-    PRIVATE spdlog::spdlog
-    PRIVATE logger
-    PRIVATE ais_parser
+target_link_libraries(ais_test_task
     PRIVATE ${QT_DEPEND_LIBS}
 )
 
 # 添加Windows Socket库链接
 if(WIN32)
-    target_link_libraries(ais_decoder_parser_ui
+    target_link_libraries(ais_test_task
         PRIVATE ws2_32
     )
 endif()
-
-# 设置子项目特定的编译定义
-target_compile_definitions(ais_decoder_parser_ui PRIVATE
-    LOGGER_PROJECT_NAME=AIS_UI
-    LOGGING_SCHEME_SPDLOG
-    GLOBAL_LOG_LEVEL=1  # DEBUG级别
-)
 
 # 构建后运行依赖打包命令
 if(WIN32)
@@ -89,12 +72,12 @@ if(WIN32)
         # 检查脚本是否存在
         if(EXISTS "${DEPLOY_SCRIPT}")
             # 构建后分析依赖并复制
-            add_custom_command(TARGET ais_decoder_parser_ui POST_BUILD
+            add_custom_command(TARGET ais_test_task POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
                 COMMAND bash "${DEPLOY_SCRIPT}"
                     "${TOOLCHAIN_BIN_DIR}"
                     "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
-                    "$<TARGET_FILE:ais_decoder_parser_ui>"
+                    "$<TARGET_FILE:ais_test_task>"
                 COMMENT "Copying required ${TOOLCHAIN_TYPE} runtime DLLs..."
                 VERBATIM
             )
@@ -110,14 +93,14 @@ if(WIN32)
     )
     
     if(WINDEPLOYQT_EXECUTABLE)
-        add_custom_command(TARGET ais_decoder_parser_ui POST_BUILD
+        add_custom_command(TARGET ais_test_task POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
             COMMAND "${WINDEPLOYQT_EXECUTABLE}"
                 --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/ui/qml"
                 --no-compiler-runtime
                 --no-system-d3d-compiler
                 --no-opengl-sw
-                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ais_decoder_parser_ui.exe"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ais_test_task.exe"
             COMMENT "Deploying Qt runtime dependencies..."
             VERBATIM
         )

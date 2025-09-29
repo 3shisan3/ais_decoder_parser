@@ -24,6 +24,10 @@ Version history
 #include <thread>
 #include <memory>
 
+#if _WIN32
+#include <windows.h>
+#endif
+
 std::atomic<bool> g_running{true};
 
 // 全局变量用于存储服务实例
@@ -101,6 +105,11 @@ private:
 
 int main(int argc, char* argv[])
 {
+#if _WIN32
+    // 设置命令行使用utf-8编码
+    SetConsoleOutputCP(CP_UTF8);
+#endif
+
     // 设置信号处理
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);

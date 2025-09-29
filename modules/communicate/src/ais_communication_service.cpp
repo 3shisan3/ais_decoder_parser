@@ -90,7 +90,7 @@ int AISCommunicationService::initialize(const CommunicateCfg& commCfg,
         --errorCode;
 
         // 订阅本地AIS数据
-        ret = communicate::SubscribeLocal(nullptr, commCfg.subPort, this);
+        ret = communicate::SubscribeLocal("127.0.0.1", commCfg.subPort, this);
         if (ret != 0) {
             LOG_ERROR("Failed to subscribe to local AIS data on port {}: {}", commCfg.subPort, ret);
             return errorCode;

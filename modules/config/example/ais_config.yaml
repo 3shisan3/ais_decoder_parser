@@ -7,7 +7,7 @@ ais:
   
   # 解析器配置
   parser:
-    validateChecksum: true            # 是否验证校验和
+    validateChecksum: false           # 是否验证校验和
     enableMultipartReassembly: true   # 是否启用多部分消息重组
     maxMultipartAge: 300              # 多部分消息最大保留时间(秒)
   

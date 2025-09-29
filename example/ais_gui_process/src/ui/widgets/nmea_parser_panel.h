@@ -33,6 +33,7 @@ public slots:
 private:
     void createUI();
     void displayParseResult(const QVariantMap &result);
+    void refreshDisplay(); // 刷新显示函数
     void updateStatistics();
 
     AISParserManager *m_parserManager;

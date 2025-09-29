@@ -69,12 +69,6 @@ void NMEAParserPanel::createUI()
     controlLayout->addWidget(m_displayFormatCombo);
     controlLayout->addStretch();
     
-    // // 统计信息
-    // QHBoxLayout *statsLayout = new QHBoxLayout();
-    // m_statsLabel = new QLabel("总计: 0, 成功: 0, 失败: 0", this);
-    // statsLayout->addWidget(m_statsLabel);
-    // statsLayout->addStretch();
-    
     // 进度条
     m_progressBar = new QProgressBar(this);
     m_progressBar->setVisible(false);
@@ -102,7 +96,6 @@ void NMEAParserPanel::createUI()
     mainLayout->addWidget(inputLabel);
     mainLayout->addWidget(m_inputTextEdit);
     mainLayout->addLayout(controlLayout);
-    // mainLayout->addLayout(statsLayout);
     mainLayout->addWidget(m_progressBar);
     mainLayout->addWidget(splitter);
     
@@ -117,6 +110,7 @@ void NMEAParserPanel::createUI()
             this, [this](int index) {
                 m_resultTree->setVisible(index == 0);
                 m_outputTextEdit->setVisible(index > 0);
+                refreshDisplay(); // 切换显示格式时刷新内容
             });
 }
 
@@ -173,6 +167,7 @@ void NMEAParserPanel::onClearAll()
     m_resultTree->clear();
     m_currentResults.clear();
     m_totalParsed = m_successCount = m_errorCount = 0;
+    updateStatistics();
 }
 
 void NMEAParserPanel::onExportResults()
@@ -204,8 +199,8 @@ void NMEAParserPanel::onExportResults()
 
 void NMEAParserPanel::onParseCompleted(const QVariantMap &result)
 {
-    displayParseResult(result);
     m_currentResults.append(result);
+    displayParseResult(result);
     updateStatistics();
 }
 
@@ -214,14 +209,13 @@ void NMEAParserPanel::onBatchParseCompleted(const QVariantList &results)
     m_progressBar->setVisible(false);
     m_currentResults = results;
     
-    // 显示第一条结果的摘要
-    if (!results.isEmpty()) {
-        displayParseResult(results.first().toMap());
-    }
-    
+    refreshDisplay(); // 批量解析完成后刷新显示
     updateStatistics();
-    QMessageBox::information(this, "完成", 
-        QString("批量解析完成\n成功: %1\n失败: %2").arg(m_successCount).arg(m_errorCount));
+    
+    if (!results.isEmpty()) {
+        QMessageBox::information(this, "完成", 
+            QString("批量解析完成\n成功: %1\n失败: %2").arg(m_successCount).arg(m_errorCount));
+    }
 }
 
 void NMEAParserPanel::onParseError(const QString &errorMessage)
@@ -230,51 +224,81 @@ void NMEAParserPanel::onParseError(const QString &errorMessage)
     QMessageBox::warning(this, "解析错误", errorMessage);
 }
 
-void NMEAParserPanel::displayParseResult(const QVariantMap &result)
+void NMEAParserPanel::refreshDisplay()
 {
-    if (m_displayFormatCombo->currentIndex() == 0) {
-        // 树状视图显示
+    int displayFormat = m_displayFormatCombo->currentIndex();
+    
+    if (displayFormat == 0) {
+        // 树状视图显示所有结果
         m_resultTree->clear();
         
-        QTreeWidgetItem *rootItem = new QTreeWidgetItem(m_resultTree);
-        rootItem->setText(0, "解析结果");
-        rootItem->setText(1, result["success"].toBool() ? "成功" : "失败");
-        
-        for (auto it = result.constBegin(); it != result.constEnd(); ++it) {
-            QTreeWidgetItem *item = new QTreeWidgetItem(rootItem);
-            item->setText(0, it.key());
-            item->setText(1, it.value().toString());
+        for (int i = 0; i < m_currentResults.size(); ++i) {
+            const QVariantMap &result = m_currentResults[i].toMap();
             
-            // 添加字段描述
-            if (it.key() == "type") {
-                item->setText(2, "AIS消息类型");
-            } else if (it.key() == "mmsi") {
-                item->setText(2, "船舶MMSI号码");
-            } else if (it.key() == "rawNMEA") {
-                item->setText(2, "原始NMEA语句");
+            QTreeWidgetItem *rootItem = new QTreeWidgetItem(m_resultTree);
+            rootItem->setText(0, QString("解析结果 #%1").arg(i + 1));
+            rootItem->setText(1, result["success"].toBool() ? "成功" : "失败");
+            
+            for (auto it = result.constBegin(); it != result.constEnd(); ++it) {
+                QTreeWidgetItem *item = new QTreeWidgetItem(rootItem);
+                item->setText(0, it.key());
+                item->setText(1, it.value().toString());
+                
+                // 添加字段描述
+                if (it.key() == "type") {
+                    item->setText(2, "AIS消息类型");
+                } else if (it.key() == "mmsi") {
+                    item->setText(2, "船舶MMSI号码");
+                } else if (it.key() == "rawNMEA") {
+                    item->setText(2, "原始NMEA语句");
+                }
+            }
+            m_resultTree->expandItem(rootItem);
+        }
+    } else if (displayFormat == 1) {
+        // JSON格式显示所有结果
+        QJsonArray jsonArray;
+        for (const QVariant &result : m_currentResults) {
+            jsonArray.append(QJsonValue::fromVariant(result));
+        }
+        QJsonDocument doc(jsonArray);
+        QString jsonText = doc.toJson(QJsonDocument::Indented);
+        m_outputTextEdit->setPlainText(jsonText);
+    } else {
+        // 文本摘要显示所有结果
+        QString summary;
+        for (int i = 0; i < m_currentResults.size(); ++i) {
+            const QVariantMap &result = m_currentResults[i].toMap();
+            
+            if (i > 0) {
+                summary += "\n" + QString().fill('-', 50) + "\n";
+            }
+            
+            if (result["success"].toBool()) {
+                summary += QString("结果 #%1 - 解析成功\n"
+                                 "消息类型: %2\n"
+                                 "MMSI: %3\n"
+                                 "时间: %4\n"
+                                 "原始NMEA: %5\n")
+                    .arg(i + 1)
+                    .arg(result["type"].toString())
+                    .arg(result["mmsi"].toString())
+                    .arg(result["timestamp"].toString())
+                    .arg(result["rawNMEA"].toString());
+            } else {
+                summary += QString("结果 #%1 - 解析失败\n错误: %2")
+                    .arg(i + 1)
+                    .arg(result["error"].toString());
             }
         }
-        m_resultTree->expandItem(rootItem);
-    } else if (m_displayFormatCombo->currentIndex() == 1) {
-        // JSON格式显示
-        QJsonDocument doc = QJsonDocument::fromVariant(result);
-        m_outputTextEdit->setText(doc.toJson(QJsonDocument::Indented));
-    } else {
-        // 文本摘要显示
-        QString summary = QString("解析结果: %1\n")
-            .arg(result["success"].toBool() ? "成功" : "失败");
-        
-        if (result["success"].toBool()) {
-            summary += QString("消息类型: %1\nMMSI: %2\n时间: %3")
-                .arg(result["type"].toString())
-                .arg(result["mmsi"].toString())
-                .arg(result["timestamp"].toString());
-        } else {
-            summary += QString("错误: %1").arg(result["error"].toString());
-        }
-        
-        m_outputTextEdit->setText(summary);
+        m_outputTextEdit->setPlainText(summary);
     }
+}
+
+void NMEAParserPanel::displayParseResult(const QVariantMap &result)
+{
+    // 现在只负责添加新结果，显示由refreshDisplay统一处理
+    refreshDisplay();
 }
 
 void NMEAParserPanel::updateStatistics()
