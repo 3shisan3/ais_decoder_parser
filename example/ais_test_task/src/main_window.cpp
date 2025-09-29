@@ -490,8 +490,8 @@ void MainWindow::onSendAisData()
             int ret = communicate::SendGeneralMessage(
                 m_udpHost.toUtf8().constData(),
                 m_udpPort,
-                const_cast<char*>(aisData.c_str()),
-                aisData.size()
+                aisData.data(),
+                aisData.size() + 1
             );
             
             if (ret == 0) {
@@ -687,7 +687,7 @@ std::string MainWindow::generateAisMessage(const AisVesselInfo &vessel, const QG
     QString dataPart = QString("AIVDM,1,1,,A,%1,0").arg(QString::fromStdString(payload));
     uint8_t checksum = calculateChecksum(dataPart);
     
-    QString nmeaMessage = QString("$%1*%2\r\n")
+    QString nmeaMessage = QString("!%1*%2")
         .arg(dataPart)
         .arg(checksum, 2, 16, QLatin1Char('0')).toUpper();
     

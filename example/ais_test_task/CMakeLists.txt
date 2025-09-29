@@ -15,13 +15,14 @@ list(APPEND CMAKE_PREFIX_PATH ${QT_PREFIX_PATH})
 set(CMAKE_AUTOMOC ON)
 
 # 查找Qt依赖
-find_package(Qt6 COMPONENTS Core Widgets Gui Positioning REQUIRED)
+find_package(Qt6 COMPONENTS Core Widgets Gui Network Positioning REQUIRED)
 
 # 设置Qt的依赖库
 set(QT_DEPEND_LIBS
     Qt6::Core
     Qt6::Widgets
     Qt6::Gui
+    Qt6::Network
     Qt6::Positioning
 )
 

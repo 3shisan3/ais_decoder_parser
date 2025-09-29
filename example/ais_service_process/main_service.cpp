@@ -74,12 +74,12 @@ public:
         
         try {
             // 保存原始数据用于IPC转发
-            std::string* aisData = static_cast<std::string*>(msg.get());
-            if (!aisData || aisData->empty()) {
+            const char* aisData = static_cast<const char*>(msg.get());
+            if (!aisData) {
                 return 0;
             }
             
-            std::string rawData = *aisData;
+            std::string rawData = aisData;
             
             // 调用父类处理
             int result = ais::AISCommunicationService::handleMsg(msg);

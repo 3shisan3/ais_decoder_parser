@@ -117,16 +117,16 @@ int AISCommunicationService::handleMsg(std::shared_ptr<void> msg)
 
     try {
         // 假设消息是AIS原始数据字符串
-        std::string* aisData = static_cast<std::string*>(msg.get());
-        if (!aisData || aisData->empty()) {
+        const char* aisData = static_cast<const char*>(msg.get());
+        if (!aisData) {
             LOG_WARNING("Received empty AIS message");
             return 0;
         }
 
-        LOG_DEBUG("Received AIS data: {}", *aisData);
+        LOG_DEBUG("Received AIS data: {}", aisData);
 
         // 使用外部提供的AISParser解析消息
-        auto parsedMessage = aisParser_->parse(*aisData);
+        auto parsedMessage = aisParser_->parse(aisData);
         if (parsedMessage) {
             processAISMessage(*parsedMessage);
         } else {

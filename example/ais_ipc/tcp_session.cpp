@@ -109,7 +109,7 @@ bool TCPSession::sendCommand(const std::string& jsonStr, int timeoutMs)
     
     try {
         std::unique_lock<std::mutex> lock(sendQueueMutex_);
-        sendQueue_.push(jsonStr);
+        sendQueue_.push(jsonStr + '\n');    // client里用'\n'来识别结束
         sendQueueCV_.notify_one();
         return true;
     } catch (const std::exception& e) {
