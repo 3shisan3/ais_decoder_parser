@@ -18,6 +18,8 @@
 #include <QProgressBar>
 #include <QTimer>
 
+#include "core/processmanager.h"
+
 class ServiceControlPanel : public QWidget
 {
     Q_OBJECT

@@ -96,7 +96,7 @@ if(WIN32)
     if (MINGW)
         # 获取 UCRT64 工具链的 bin 目录
         get_filename_component(COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-        get_filename_component(UCRT_BIN_DIR "${COMPILER_DIR}/../bin" ABSOLUTE)
+        get_filename_component(TOOLCHAIN_BIN_DIR "${COMPILER_DIR}/../bin" ABSOLUTE)
         
         # 根据工具链类型选择部署脚本
         if(CMAKE_CXX_COMPILER MATCHES ".*ucrt.*")
