@@ -89,6 +89,8 @@ int AISCommunicationService::initialize(const CommunicateCfg& commCfg,
         }
         --errorCode;
 
+        commCfg_ = commCfg;
+
         // 订阅本地AIS数据
         ret = communicate::SubscribeLocal("127.0.0.1", commCfg.subPort, this);
         if (ret != 0) {
@@ -107,6 +109,18 @@ int AISCommunicationService::initialize(const CommunicateCfg& commCfg,
         LOG_ERROR("Exception during initialization: {}", e.what());
         return errorCode;
     }
+}
+
+void AISCommunicationService::destroy()
+{
+    if (!isInitialized_) {
+        return;
+    }
+
+    aisParser_.reset();
+    aisParser_ = nullptr;
+
+    communicate::Destroy();
 }
 
 int AISCommunicationService::handleMsg(std::shared_ptr<void> msg)
@@ -146,13 +160,21 @@ void AISCommunicationService::processAISMessage(const AISMessage& aisMsg)
     uint32_t mmsi = aisMsg.mmsi;
     std::string csvData = aisMsg.toCsv();
 
-    // 使用LRU缓存自动管理船舶信息
-    bool inserted = shipInfoCache_.Insert(mmsi, csvData);
-    
-    if (inserted) {
-        LOG_INFO("New/Updated ship info: MMSI={}", mmsi);
-    } else {
-        LOG_WARNING("Failed to insert ship info into cache: MMSI={}", mmsi);
+    if (communicate::SendGeneralMessage(csvData.data(), csvData.size() + 1, 
+                                        commCfg_.sendIP.data(), commCfg_.sendPort) != 0)
+    {
+        // 使用LRU缓存自动管理船舶信息
+        bool inserted = shipInfoCache_.Insert(mmsi, csvData);
+        
+        if (inserted) {
+            LOG_INFO("New/Updated ship info: MMSI={}", mmsi);
+        } else {
+            LOG_WARNING("Failed to insert ship info into cache: MMSI={}", mmsi);
+        }
+    }
+    else
+    {
+        LOG_ERROR("Failed to send ship info: MMSI={}", mmsi);
     }
 
     LOG_DEBUG("Processed ship info: MMSI={}, Content={}", mmsi, csvData);
@@ -167,6 +189,16 @@ void AISCommunicationService::clearShipInfo()
 {
     shipInfoCache_.Clear();
     LOG_INFO("Cleared all ship information");
+}
+
+std::string AISCommunicationService::getLastMsgDealResult() const
+{
+    // 获取最新处理结果
+    if (shipInfoCache_.IsEmpty()) {
+        return "";
+    }
+    
+    return shipInfoCache_.GetLatest().value().second;
 }
 
 } // namespace ais
