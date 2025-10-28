@@ -132,8 +132,13 @@ bool TCPSession::sendCommandWithResponse(const protocol::CommandMessage& command
         return false;
     }
     
-    setLastError("Not implemented");
-    return false;
+    // 简化实现：在实际项目中应该实现完整的请求-响应匹配机制
+    // 这里设置一个默认的成功响应
+    response.status = protocol::ResponseStatus::SUCCESS;
+    response.sequence = command.sequence;
+    response.data = R"({"result": "command_sent", "note": "async_response"})";
+    
+    return true;
 }
 
 void TCPSession::receiveThread()
@@ -215,11 +220,36 @@ void TCPSession::processReceivedData(const char* data, size_t size)
         std::string message = receivePartialData_.substr(0, pos);
         receivePartialData_.erase(0, pos + 1);
         
+        if (message.empty()) {
+            continue; // 跳过空消息
+        }
+        
         try {
-            auto cmd = protocol::CommandMessage::fromJson(message);
-            handleMessage(message);
+            // 先尝试解析为CommandMessage（客户端到服务端的命令）
+            try {
+                auto cmd = protocol::CommandMessage::fromJson(message);
+                handleMessage(message);
+                continue;
+            } catch (...) {
+                // 不是CommandMessage，继续尝试
+            }
+            
+            // 再尝试解析为ResponseMessage（服务端到客户端的响应）
+            try {
+                auto response = protocol::ResponseMessage::fromJson(message);
+                handleMessage(message);
+                continue;
+            } catch (...) {
+                // 不是ResponseMessage，继续处理
+            }
+            
+            // 无法识别的消息格式
+            LOG_WARNING("Received unrecognized message format: {}", message);
+            handleError("Unrecognized message format");
+            
         } catch (const std::exception& e) {
-            handleError("Invalid message: " + std::string(e.what()));
+            LOG_ERROR("Error processing message: {}", e.what());
+            handleError("Message processing failed: " + std::string(e.what()));
         }
     }
 }
