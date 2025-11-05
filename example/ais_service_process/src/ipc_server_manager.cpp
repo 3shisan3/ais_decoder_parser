@@ -234,7 +234,7 @@ void IPCServerManager::acceptThread()
         LOG_INFO("New client connected: {}", sessionId);
         
         // 创建TCP会话
-        auto session = std::make_shared<TCPSession>(clientSocket, sessionId);
+        auto session = std::make_shared<TCPServerSession>(clientSocket, sessionId);
         
         // 设置消息处理器
         session->setMessageHandler([this, session](const protocol::CommandMessage& msg) {
@@ -265,7 +265,7 @@ void IPCServerManager::acceptThread()
     LOG_INFO("Accept thread stopped");
 }
 
-void IPCServerManager::handleClientMessage(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleClientMessage(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     LOG_DEBUG("Received message from {}: type={}, sequence={}", 
               session->getSessionId(), static_cast<int>(message.type), message.sequence);
@@ -331,7 +331,7 @@ void IPCServerManager::handleClientDisconnect(const std::string& sessionId)
     }
 }
 
-void IPCServerManager::handleGetStatus(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleGetStatus(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     if (!statusCallback_) {
         sendResponse(session, protocol::ResponseStatus::ERR, message.sequence,
@@ -351,7 +351,7 @@ void IPCServerManager::handleGetStatus(TCPSessionPtr session, const protocol::Co
     }
 }
 
-void IPCServerManager::handleStartService(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleStartService(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     bool success = false;
     std::string resultMessage;
@@ -376,7 +376,7 @@ void IPCServerManager::handleStartService(TCPSessionPtr session, const protocol:
     LOG_INFO("Start service command processed for client {}: {}", session->getSessionId(), resultMessage);
 }
 
-void IPCServerManager::handleStopService(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleStopService(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     bool success = false;
     std::string resultMessage;
@@ -401,7 +401,7 @@ void IPCServerManager::handleStopService(TCPSessionPtr session, const protocol::
     LOG_INFO("Stop service command processed for client {}: {}", session->getSessionId(), resultMessage);
 }
 
-void IPCServerManager::handleGetShipCount(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleGetShipCount(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     if (!aisService_) {
         sendResponse(session, protocol::ResponseStatus::ERR, message.sequence,
@@ -424,7 +424,7 @@ void IPCServerManager::handleGetShipCount(TCPSessionPtr session, const protocol:
     }
 }
 
-void IPCServerManager::handleConfigUpdate(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleConfigUpdate(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     try {
         // 解析配置数据
@@ -450,7 +450,7 @@ void IPCServerManager::handleConfigUpdate(TCPSessionPtr session, const protocol:
     }
 }
 
-void IPCServerManager::handleGetMessageStats(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleGetMessageStats(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     if (!statusCallback_) {
         sendResponse(session, protocol::ResponseStatus::ERR, message.sequence,
@@ -477,7 +477,7 @@ void IPCServerManager::handleGetMessageStats(TCPSessionPtr session, const protoc
     }
 }
 
-void IPCServerManager::handleHeartbeat(TCPSessionPtr session, const protocol::CommandMessage& message)
+void IPCServerManager::handleHeartbeat(TCPServerSessionPtr session, const protocol::CommandMessage& message)
 {
     // 心跳包直接返回成功，包含服务器时间戳
     nlohmann::json result;
@@ -490,7 +490,7 @@ void IPCServerManager::handleHeartbeat(TCPSessionPtr session, const protocol::Co
     LOG_DEBUG("Heartbeat response sent to client: {}", session->getSessionId());
 }
 
-void IPCServerManager::handleChangeServiceLogs(TCPSessionPtr session, const protocol::CommandMessage &message)
+void IPCServerManager::handleChangeServiceLogs(TCPServerSessionPtr session, const protocol::CommandMessage &message)
 {
     try
     {
@@ -539,7 +539,7 @@ void IPCServerManager::handleChangeServiceLogs(TCPSessionPtr session, const prot
     }
 }
 
-void IPCServerManager::sendResponse(TCPSessionPtr session, protocol::ResponseStatus status, 
+void IPCServerManager::sendResponse(TCPServerSessionPtr session, protocol::ResponseStatus status, 
                             uint32_t sequence, const std::string& data)
 {
     if (!session || !session->isConnected()) {

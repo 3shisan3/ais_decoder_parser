@@ -385,12 +385,11 @@ int main(int argc, char* argv[])
         // 只有数据变动时才打印
         static size_t lastShipCount = -1;
         static size_t lastConnectionCount = -1;
-        static long long lastUptime = -1;
         static bool lastServiceRunning = true;
         static bool lastLogBroadcast = false;
 
         if (shipCount != lastShipCount || connectionCount != lastConnectionCount || 
-            uptime != lastUptime || g_serviceRunning != lastServiceRunning || 
+            g_serviceRunning != lastServiceRunning || 
             g_enableLogBroadcast != lastLogBroadcast)
         {
             std::cout << "运行时间: " << uptime << "s, 船舶数量: " << shipCount
@@ -404,7 +403,6 @@ int main(int argc, char* argv[])
 
             lastShipCount = shipCount;
             lastConnectionCount = connectionCount;
-            lastUptime = uptime;
             lastServiceRunning = g_serviceRunning;
             lastLogBroadcast = g_enableLogBroadcast;
         }

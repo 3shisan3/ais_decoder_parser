@@ -1,5 +1,5 @@
-#ifndef TCP_SESSION_H
-#define TCP_SESSION_H
+#ifndef TCP_SERVER_SESSION_H
+#define TCP_SERVER_SESSION_H
 
 #include "ipc_connection.h"
 
@@ -13,21 +13,28 @@
 namespace ais
 {
 
-class TCPSession : public IPCConnection
+/**
+ * @brief TCP服务端会话类
+ * 
+ * 管理单个客户端连接，处理客户端命令和发送响应
+ * 服务端接受连接后为每个客户端创建此会话实例
+ */
+class TCPServerSession : public IPCConnection
 {
 public:
     /**
      * @brief 构造函数
-     * @param socket 已连接的socket
+     * @param socket 已连接的客户端socket
      * @param sessionId 会话ID
      */
-    TCPSession(int socket, const std::string& sessionId = "");
+    TCPServerSession(int socket, const std::string& sessionId = "");
     
     /**
      * @brief 析构函数
      */
-    ~TCPSession() override;
+    ~TCPServerSession() override;
     
+    // IPCConnection接口实现
     bool start() override;
     void stop() override;
     bool isConnected() const override;
@@ -59,11 +66,17 @@ public:
     std::string getSessionId() const;
     
     /**
-     * @brief 获取远程地址信息
+     * @brief 获取客户端地址信息
+     * @return 客户端地址字符串
+     */
+    std::string getClientAddress() const;
+    
+    /**
+     * @brief 获取远程地址信息（兼容TCPSession接口）
      * @return 远程地址字符串
      */
-    std::string getRemoteAddress() const;
-    
+    std::string getRemoteAddress() const { return getClientAddress(); }
+
 private:
     /**
      * @brief 接收线程函数
@@ -82,9 +95,9 @@ private:
      */
     void processReceivedData(const char* data, size_t size);
     
-    int socket_;                    // Socket文件描述符
+    int socket_;                    // 客户端Socket文件描述符
     std::string sessionId_;         // 会话ID
-    std::string remoteAddress_;     // 远程地址
+    std::string clientAddress_;     // 客户端地址
     
     std::atomic<bool> running_;
     std::thread receiveThread_;
@@ -97,8 +110,8 @@ private:
     std::string receivePartialData_;
 };
 
-using TCPSessionPtr = std::shared_ptr<TCPSession>;
+using TCPServerSessionPtr = std::shared_ptr<TCPServerSession>;
 
 } // namespace ais
 
-#endif // TCP_SESSION_H
+#endif // TCP_SERVER_SESSION_H

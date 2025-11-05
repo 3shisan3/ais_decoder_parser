@@ -1,7 +1,7 @@
 #ifndef IPC_SERVER_MANAGER_H
 #define IPC_SERVER_MANAGER_H
 
-#include "tcp_session.h"
+#include "tcp_server_session.h" 
 #include "protocol.h"
 #include "ais_communication_service.h"
 
@@ -100,7 +100,7 @@ private:
      * @param session TCP会话
      * @param message 接收到的消息
      */
-    void handleClientMessage(TCPSessionPtr session, const protocol::CommandMessage& message);
+    void handleClientMessage(TCPServerSessionPtr session, const protocol::CommandMessage& message);
     
     /**
      * @brief 处理客户端断开连接
@@ -109,14 +109,14 @@ private:
     void handleClientDisconnect(const std::string& sessionId);
     
     // 命令处理函数
-    void handleGetStatus(TCPSessionPtr session, const protocol::CommandMessage& message);
-    void handleStartService(TCPSessionPtr session, const protocol::CommandMessage& message);
-    void handleStopService(TCPSessionPtr session, const protocol::CommandMessage& message);
-    void handleGetShipCount(TCPSessionPtr session, const protocol::CommandMessage& message);
-    void handleConfigUpdate(TCPSessionPtr session, const protocol::CommandMessage& message);
-    void handleGetMessageStats(TCPSessionPtr session, const protocol::CommandMessage& message);
-    void handleHeartbeat(TCPSessionPtr session, const protocol::CommandMessage& message);
-    void handleChangeServiceLogs(TCPSessionPtr session, const protocol::CommandMessage& message);
+    void handleGetStatus(TCPServerSessionPtr session, const protocol::CommandMessage& message);
+    void handleStartService(TCPServerSessionPtr session, const protocol::CommandMessage& message);
+    void handleStopService(TCPServerSessionPtr session, const protocol::CommandMessage& message);
+    void handleGetShipCount(TCPServerSessionPtr session, const protocol::CommandMessage& message);
+    void handleConfigUpdate(TCPServerSessionPtr session, const protocol::CommandMessage& message);
+    void handleGetMessageStats(TCPServerSessionPtr session, const protocol::CommandMessage& message);
+    void handleHeartbeat(TCPServerSessionPtr session, const protocol::CommandMessage& message);
+    void handleChangeServiceLogs(TCPServerSessionPtr session, const protocol::CommandMessage& message);
     
     /**
      * @brief 发送响应消息
@@ -125,15 +125,15 @@ private:
      * @param sequence 序列号
      * @param data 响应数据
      */
-    void sendResponse(TCPSessionPtr session, protocol::ResponseStatus status, 
-                     uint32_t sequence, const std::string& data = "{}");
+    void sendResponse(TCPServerSessionPtr session, protocol::ResponseStatus status, 
+                 uint32_t sequence, const std::string& data = "{}");
 
 private:
     int serverSocket_;                                      // 服务器socket
     std::atomic<bool> running_;                             // 运行状态
     std::thread acceptThread_;                              // 接受连接线程
     
-    std::unordered_map<std::string, TCPSessionPtr> sessions_; // 客户端会话映射
+    std::unordered_map<std::string, TCPServerSessionPtr> sessions_; // 客户端会话映射
     mutable std::mutex sessionsMutex_;                      // 会话映射互斥锁
     
     std::shared_ptr<AISCommunicationService> aisService_;   // AIS服务引用
