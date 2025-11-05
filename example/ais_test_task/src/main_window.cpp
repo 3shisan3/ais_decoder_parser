@@ -870,7 +870,7 @@ void MainWindow::onSendAisData()
         if (!aisData.empty()) {
             // 使用communicate API发送数据
             int ret = communicate::SendGeneralMessage(
-                m_udpHost.toUtf8().constData(),
+                m_udpHost.toStdString().c_str(),
                 m_udpPort,
                 aisData.data(),
                 aisData.size() + 1

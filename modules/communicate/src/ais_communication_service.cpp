@@ -160,8 +160,8 @@ void AISCommunicationService::processAISMessage(const AISMessage& aisMsg)
     uint32_t mmsi = aisMsg.mmsi;
     std::string csvData = aisMsg.toCsv();
 
-    if (communicate::SendGeneralMessage(csvData.data(), csvData.size() + 1, 
-                                        commCfg_.sendIP.data(), commCfg_.sendPort) != 0)
+    if (communicate::SendGeneralMessage(commCfg_.sendIP.data(), commCfg_.sendPort,
+                                    csvData.data(), csvData.size() + 1) != 0)
     {
         // 使用LRU缓存自动管理船舶信息
         bool inserted = shipInfoCache_.Insert(mmsi, csvData);
