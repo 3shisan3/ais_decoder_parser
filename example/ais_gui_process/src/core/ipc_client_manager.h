@@ -5,11 +5,13 @@
 #include <QVariant>
 #include <QString>
 #include <QTimer>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <cstdint>
+#include <memory>
 
-#include "core/tcp_ipc_client.h"
+#include "tcp_client_session.h"
 #include "core/ais_parser_manager.h"
 
 class IPCClientManager : public QObject
@@ -38,10 +40,18 @@ public:
     void getServiceStatus();
     void getServiceConfig();
     void updateServiceConfig(const QVariantMap &config);
-    void sendCustomCommand(const QString &command, const QVariantMap &params = QVariantMap());
+    void getShipCount();
+    void getMessageStats();
+    void toggleServiceLogs();
+    void sendHeartbeat();
+    void sendCustomCommand(const QString &commandType, const QVariantMap &params = QVariantMap());
 
     // 获取解析器管理器
     AISParserManager* getParserManager() const;
+
+    // 连接配置
+    void setConnectTimeout(int timeoutMs);
+    void enableAutoReconnect(bool enable, uint32_t intervalMs = 3000);
 
 signals:
     void connectionStateChanged(bool connected);
@@ -52,12 +62,15 @@ signals:
     void errorOccurred(const QString &errorMessage);
     void aisMessageReceived(const QString &rawData, const QString &processedData);
     void rawAisMessageReceived(const QString &rawData);     // 原始AIS数据
+    void shipCountReceived(int count);                      // 船舶数量
+    void messageStatsReceived(const QVariantMap &stats);    // 消息统计
 
 private slots:
     void onReconnectTimeout();
 
 private:
     void initializeClient();
+    void cleanupClient();
     QVariantMap parseMessage(const QString &message);
     void sendProtocolCommand(const ais::protocol::CommandMessage &cmd);
     void startReconnectTimer();
@@ -65,19 +78,24 @@ private:
     uint32_t generateSequence();
     
     // 消息处理辅助方法
+    void handleServerMessage(const ais::protocol::CommandMessage &cmd);
+    void handleServerResponse(const ais::protocol::ResponseMessage &response);
+    void handleConnectionError(const std::string &error);
     void handleAISMessage(const ais::protocol::CommandMessage &cmd);
     void handleConfigUpdate(const ais::protocol::CommandMessage &cmd);
+    void handleSuccessResponse(const ais::protocol::ResponseMessage &response);
+    void handleErrorResponse(const ais::protocol::ResponseMessage &response);
 
-    ais::AISClient *ipcClient;
-    AISParserManager *parserManager;
+    std::unique_ptr<ais::TCPClientSession> clientSession_;
+    AISParserManager *parserManager_;
     
-    QString m_serverAddress;
-    quint16 m_serverPort;
-    bool m_connected;
-    bool m_autoReconnect;
+    QString serverAddress_;
+    quint16 serverPort_;
+    bool connected_;
+    bool autoReconnect_;
     
-    QTimer *reconnectTimer;
-    int reconnectAttempts;
+    QTimer *reconnectTimer_;
+    int reconnectAttempts_;
 };
 
 #endif // IPC_CLIENT_MANAGER_H

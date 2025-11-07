@@ -24,6 +24,9 @@ MainWindow::MainWindow(QWidget *parent)
     
     // 初始化IPC客户端
     initializeIPCClient();
+
+    // 初始化服务控制
+    initializeServiceControl();
     
     // 创建UI
     createUI();
@@ -89,6 +92,43 @@ void MainWindow::initializeIPCClient()
     ipcClientManager = new IPCClientManager(this);
     ipcClientManager->setServerAddress(serverAddress);
     ipcClientManager->setServerPort(serverPort);
+}
+
+void MainWindow::initializeServiceControl()
+{
+    // 设置服务控制面板的IPC客户端管理器
+    if (serviceControlPanel && ipcClientManager) {
+        // 设置服务可执行文件路径（根据实际情况调整）
+        serviceControlPanel->setServiceExecutable("./ais_service");
+        serviceControlPanel->setServiceWorkingDir("./");
+        serviceControlPanel->setServiceArguments({"--port", "2333"});
+    }
+}
+
+void MainWindow::onServiceStatsUpdated(const QVariantMap &stats)
+{
+    if (serviceControlPanel) {
+        serviceControlPanel->updateServiceStats(stats);
+    }
+    
+    // 更新状态栏显示
+    int received = stats.value("received", 0).toInt();
+    int processed = stats.value("processed", 0).toInt();
+    statusBar()->showMessage(QString("消息统计 - 接收: %1, 处理: %2").arg(received).arg(processed), 3000);
+}
+
+void MainWindow::onShipCountReceived(int count)
+{
+    // 可以在这里更新船舶数量显示
+    statusBar()->showMessage(QString("当前船舶数量: %1").arg(count), 3000);
+}
+
+void MainWindow::updateServiceControlStatus()
+{
+    // 更新服务控制面板的连接状态
+    if (serviceControlPanel) {
+        serviceControlPanel->updateServiceStatus(serviceRunning);
+    }
 }
 
 void MainWindow::createUI()
@@ -215,6 +255,12 @@ void MainWindow::connectSignals()
             this, &MainWindow::onAisMessageReceived);
     connect(ipcClientManager, &IPCClientManager::rawAisMessageReceived,
             this, &MainWindow::onRawAisMessageReceived);
+
+    connect(ipcClientManager, &IPCClientManager::messageStatsReceived,
+            this, &MainWindow::onServiceStatsUpdated);
+    connect(ipcClientManager, &IPCClientManager::shipCountReceived,
+            this, &MainWindow::onShipCountReceived);
+
     
     // 连接服务控制面板信号
     connect(serviceControlPanel, &ServiceControlPanel::configChanged,
@@ -316,7 +362,7 @@ void MainWindow::onRawAisMessageReceived(const QString &rawData)
                     .arg(timestamp)
                     .arg(rawData.left(150));  // 限制长度防止过长
     
-    messageDisplayPanel->addMessage(aisMsg);
+    messageDisplayPanel->addMessage(aisMsg); 
     
     // 更新状态栏显示
     statusBar()->showMessage(QString("收到原始AIS数据 - 长度: %1").arg(rawData.length()), 3000);
@@ -326,17 +372,25 @@ void MainWindow::onConnectionStateChanged(bool connected)
 {
     connectedToService = connected;
     updateWindowTitle();
-    
-    if (connected) {
+
+    if (connected)
+    {
         statusBar()->showMessage("已连接到AIS服务");
         // 连接成功后请求服务状态和配置
         ipcClientManager->getServiceStatus();
         ipcClientManager->getServiceConfig();
-    } else {
-        statusBar()->showMessage("未连接");
-        serviceControlPanel->updateServiceStatus(false);
+        ipcClientManager->getMessageStats();
+        ipcClientManager->getShipCount();
     }
-    
+    else
+    {
+        statusBar()->showMessage("未连接");
+        if (serviceControlPanel)
+        {
+            serviceControlPanel->updateServiceStatus(false);
+        }
+    }
+
     // 更新连接按钮状态
     connectAction->setEnabled(!connected);
     disconnectAction->setEnabled(connected);

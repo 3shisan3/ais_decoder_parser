@@ -25,6 +25,8 @@ protected:
 
 private slots:
     void onServiceStateChanged(bool running);
+    void onServiceStatsUpdated(const QVariantMap &stats);
+    void onShipCountReceived(int count);
     void onMessageReceived(const QString &message);
     void onAisMessageReceived(const QString &rawData, const QString &processedData);
     void onRawAisMessageReceived(const QString &rawData);
@@ -46,6 +48,8 @@ private:
     void initializeIPCClient();
     void loadSettings();
     void saveSettings();
+    void initializeServiceControl();
+    void updateServiceControlStatus();
 
     // UI组件
     QTabWidget *tabWidget;
