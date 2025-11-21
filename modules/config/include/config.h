@@ -47,6 +47,17 @@ struct AISSaveCfg
 };
 
 /**
+ * @brief AIS消息生成配置
+ */
+struct AISGenerateCfg
+{
+    bool enableFragmentation = false;           // 是否启用分片
+    int defaultFragmentSize = 64;               // 默认分片大小（字符）
+    char defaultChannel = 'A';                  // 默认信道
+    std::string defaultSequenceId = "";         // 默认序列ID
+};
+
+/**
  * @brief AIS通讯配置结构体
  */
 struct CommunicateCfg

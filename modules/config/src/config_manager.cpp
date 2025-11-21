@@ -14,6 +14,7 @@ ConfigManager::ConfigManager(const std::string& configFile)
     loggerCfg_ = {true, "ais_parser.log"};
     parseCfg_ = {true, true, 300};
     saveCfg_ = {false, StorageType::CSV, "ais_data.csv"};
+    generateCfg_ = {false, 64, 'A', ""};
     communicateCfg_ = std::nullopt;
     udpTcpCommunicateCfgPath_ = "";
 }
@@ -35,6 +36,7 @@ bool ConfigManager::loadConfig()
         parseLoggerConfig();
         parseParserConfig();
         parseSaveConfig();
+        parseGenerateConfig();
         parseCommunicateConfig();
         parseUdpTcpCommunicateCfgPath();
         
@@ -89,6 +91,12 @@ bool ConfigManager::saveConfig()
         configNode_["ais"]["save"]["storageType"] = storageTypeStr;
         configNode_["ais"]["save"]["storagePath"] = saveCfg_.storagePath;
         
+        // 生成器配置
+        configNode_["ais"]["generate"]["enableFragmentation"] = generateCfg_.enableFragmentation;
+        configNode_["ais"]["generate"]["defaultFragmentSize"] = generateCfg_.defaultFragmentSize;
+        configNode_["ais"]["generate"]["defaultChannel"] = generateCfg_.defaultChannel;
+        configNode_["ais"]["generate"]["defaultSequenceId"] = generateCfg_.defaultSequenceId;
+        
         // 通讯配置
         if (communicateCfg_.has_value()) {
             configNode_["ais"]["communicate"]["subPort"] = communicateCfg_->subPort;
@@ -140,6 +148,12 @@ const AISSaveCfg& ConfigManager::getSaveConfig()
     return saveCfg_;
 }
 
+// 获取生成器配置
+const AISGenerateCfg& ConfigManager::getGenerateConfig()
+{
+    return generateCfg_;
+}
+
 // 获取通讯配置
 std::optional<CommunicateCfg> ConfigManager::getCommunicateConfig()
 {
@@ -181,6 +195,13 @@ void ConfigManager::setSaveConfig(const AISSaveCfg& cfg)
     notifyConfigChange();
 }
 
+// 设置生成器配置
+void ConfigManager::setGenerateConfig(const AISGenerateCfg& cfg)
+{
+    generateCfg_ = cfg;
+    notifyConfigChange();
+}
+
 // 设置通讯配置
 void ConfigManager::setCommunicateConfig(const std::optional<CommunicateCfg>& cfg)
 {
@@ -207,6 +228,7 @@ void ConfigManager::resetToDefaults()
     loggerCfg_ = {true, "ais_parser.log"};
     parseCfg_ = {true, true, 300};
     saveCfg_ = {false, StorageType::CSV, "ais_data.csv"};
+    generateCfg_ = {false, 64, 'A', ""};
     communicateCfg_ = std::nullopt;
     udpTcpCommunicateCfgPath_ = "";
     notifyConfigChange();
@@ -268,7 +290,7 @@ void ConfigManager::parseSaveConfig()
         const auto& node = configNode_["ais"]["save"];
         if (node && node.IsMap()) {
             if (node["saveSwitch"]) {
-                saveCfg_.saveSwitch = node["saveSwitch"].as<bool>();
+                saveCfg_.saveSwitch = node["storageSwitch"].as<bool>();
             }
             
             // 解析存储类型字符串到枚举
@@ -287,6 +309,30 @@ void ConfigManager::parseSaveConfig()
             
             if (node["storagePath"]) {
                 saveCfg_.storagePath = node["storagePath"].as<std::string>();
+            }
+        }
+    } catch (...) {
+        // 忽略解析错误，使用默认值
+    }
+}
+
+// 解析生成nmea参数配置 - 修复：完整的实现
+void ConfigManager::parseGenerateConfig()
+{
+    try {
+        const auto& node = configNode_["ais"]["generate"];
+        if (node && node.IsMap()) {
+            if (node["enableFragmentation"]) {
+                generateCfg_.enableFragmentation = node["enableFragmentation"].as<bool>();
+            }
+            if (node["defaultFragmentSize"]) {
+                generateCfg_.defaultFragmentSize = node["defaultFragmentSize"].as<int>();
+            }
+            if (node["defaultChannel"]) {
+                generateCfg_.defaultChannel = node["defaultChannel"].as<char>();
+            }
+            if (node["defaultSequenceId"]) {
+                generateCfg_.defaultSequenceId = node["defaultSequenceId"].as<std::string>();
             }
         }
     } catch (...) {

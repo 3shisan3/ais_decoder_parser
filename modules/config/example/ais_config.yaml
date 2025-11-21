@@ -16,6 +16,13 @@ ais:
     storageSwitch: false              # 启用存储开关
     storageType: "CSV"                # 本地留存ais数据格式
     storagePath: "ais_data.csv"       # 本地留存ais数据保存路径
+
+  # 生成器配置
+  generate:
+    enableFragmentation: false        # 是否启用分片
+    defaultFragmentSize: 64           # 默认分片大小
+    defaultChannel: 'A'               # 默认使用信道
+    defaultSequenceId: ""             # 默认序列ID
   
   # 通讯配置
   communicate:

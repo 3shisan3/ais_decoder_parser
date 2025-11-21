@@ -27,6 +27,7 @@ private:
     LoggerCfg loggerCfg_;                          // 日志配置
     AISParseCfg parseCfg_;                         // 解析器配置
     AISSaveCfg saveCfg_;                           // 存储配置
+    AISGenerateCfg generateCfg_;                   // 生成nmea消息默认参数
     std::optional<CommunicateCfg> communicateCfg_; // 通讯配置（可选）
     std::string udpTcpCommunicateCfgPath_;         // 通讯库配置文件路径
     
@@ -40,6 +41,7 @@ private:
     void parseLoggerConfig();
     void parseParserConfig();
     void parseSaveConfig();
+    void parseGenerateConfig();
     void parseCommunicateConfig();
     void parseUdpTcpCommunicateCfgPath();
 
@@ -105,6 +107,12 @@ public:
     const AISSaveCfg& getSaveConfig();
     
     /**
+     * @brief 获取生成器配置
+     * @return const AISGenerateCfg& 生成器配置结构体引用
+     */
+    const AISGenerateCfg& getGenerateConfig();
+    
+    /**
      * @brief 获取通讯配置
      * @return std::optional<CommunicateCfg> 通讯配置，如果不存在则返回空
      */
@@ -141,6 +149,12 @@ public:
      * @param cfg 新的存储配置
      */
     void setSaveConfig(const AISSaveCfg& cfg);
+    
+    /**
+     * @brief 设置生成器配置
+     * @param cfg 新的生成器配置
+     */
+    void setGenerateConfig(const AISGenerateCfg& cfg);
     
     /**
      * @brief 设置通讯配置
