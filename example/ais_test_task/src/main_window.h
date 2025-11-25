@@ -15,9 +15,12 @@
 #include <QTextEdit>
 #include <QLineEdit>
 #include <QGroupBox>
+#include <QCheckBox>
+#include <QSet>
 
 #include "map/multi_mapview.h"
-#include "map/layers/vessels_layer.h"  // 新增：船舶图层
+#include "map/layers/vessels_layer.h"
+#include "factory/ais_message_generator.h"
 #include "udp-tcp-communicate/communicate_api.h"
 
 // AIS船舶信息结构
@@ -34,7 +37,18 @@ struct AisVesselInfo {
     double draft;
     double speed; // 节
     double heading; // 度
+    double courseOverGround; // 对地航向（度）- 新增字段
     QGeoCoordinate position; // 位置
+    int navigationStatus;
+    int rateOfTurn;
+    QString destination;
+    int etaMonth;
+    int etaDay;
+    int etaHour;
+    int etaMinute;
+    
+    // 记录启用的消息类型
+    QSet<AISMessageType> enabledMessageTypes;
 };
 
 // AIS任务结构
@@ -48,9 +62,13 @@ struct AisGenerationTask {
     QDateTime startTime;
     int currentPointIndex;
     double progressAlongSegment;
+    int messageCounter; // 消息计数器，用于轮换消息类型
 };
 
-// 主窗口类
+/**
+ * @brief 主窗口类
+ * 提供AIS数据生成、发送和地图显示功能
+ */
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -60,30 +78,113 @@ public:
     ~MainWindow();
 
 private slots:
+    // 路线规划相关
     void onRoutePlanned(const QVector<QGeoCoordinate> &route);
+    
+    // 任务控制相关
     void onStartAisGeneration();
     void onStopAisGeneration();
     void onDeleteTask();
     void onTaskSelectionChanged();
+    
+    // 配置相关
     void onSendIntervalChanged(int interval);
+    void onUdpSettingsChanged();
+    void onMessageTypeChanged();
+    
+    // 数据生成和发送
     void onGenerateAisData();
     void onSendAisData();
-    void onUdpSettingsChanged();
+    
+    // UI控制
     void onToggleTaskDock();
     void onClearLog();
+    
+    // 随机生成功能
+    void onRandomGenerate();
 
 private:
+    /**
+     * @brief 初始化UI界面
+     */
     void setupUi();
+    
+    /**
+     * @brief 建立信号槽连接
+     */
     void setupConnections();
+    
+    /**
+     * @brief 创建AIS任务
+     * @param taskName 任务名称
+     * @param route 航线路径
+     */
     void createAisTask(const QString &taskName, const QVector<QGeoCoordinate> &route);
+    
+    /**
+     * @brief 生成随机MMSI号
+     * @return MMSI字符串
+     */
     QString generateRandomMmsi();
+    
+    /**
+     * @brief 生成随机呼号
+     * @return 呼号字符串
+     */
     QString generateRandomCallsign();
+    
+    /**
+     * @brief 生成随机船舶信息
+     * @return 船舶信息结构
+     */
     AisVesselInfo generateRandomVesselInfo();
-    std::string generateAisMessage(const AisVesselInfo &vessel, const QGeoCoordinate &position);
+    
+    /**
+     * @brief 根据船舶信息和消息类型生成AIS消息
+     * @param vesselData 船舶数据
+     * @param messageType 消息类型
+     * @return NMEA格式的AIS消息
+     */
+    std::string generateAisMessage(const AISVesselData& vesselData, AISMessageType messageType);
+    
+    /**
+     * @brief 记录日志消息
+     * @param message 日志内容
+     */
     void logMessage(const QString &message);
     
-    // 新增：更新地图上的船舶显示
+    /**
+     * @brief 更新地图上的船舶显示
+     * @param task AIS任务
+     */
     void updateVesselDisplay(const AisGenerationTask &task);
+    
+    /**
+     * @brief 获取当前启用的消息类型列表
+     * @return 消息类型集合
+     */
+    QSet<AISMessageType> getEnabledMessageTypes() const;
+    
+    /**
+     * @brief 将AisVesselInfo转换为AISVesselData
+     * @param vesselInfo 船舶信息
+     * @return AIS船舶数据
+     */
+    AISVesselData convertToAISVesselData(const AisVesselInfo& vesselInfo);
+    
+    /**
+     * @brief 在地图可见范围内随机生成位置
+     * @return 随机坐标
+     */
+    QGeoCoordinate generateRandomPositionInView();
+    
+    /**
+     * @brief 生成随机航线
+     * @param startPos 起始位置
+     * @param numPoints 航线点数量
+     * @return 航线路径
+     */
+    QVector<QGeoCoordinate> generateRandomRoute(const QGeoCoordinate& startPos, int numPoints);
 
     // UI组件
     SsMultiMapView *m_mapView;
@@ -93,6 +194,7 @@ private:
     QPushButton *m_startButton;
     QPushButton *m_stopButton;
     QPushButton *m_deleteButton;
+    QPushButton *m_randomGenerateButton;
     QSpinBox *m_intervalSpinBox;
     QLabel *m_statusLabel;
     QTextEdit *m_logTextEdit;
@@ -100,6 +202,13 @@ private:
     QSpinBox *m_udpPortSpinBox;
     QPushButton *m_clearLogButton;
     QPushButton *m_toggleTaskDockButton;
+    
+    // 消息类型选择复选框
+    QCheckBox *m_type1CheckBox;
+    QCheckBox *m_type5CheckBox;
+    QCheckBox *m_type18CheckBox;
+    QCheckBox *m_type19CheckBox;
+    QCheckBox *m_type24CheckBox;
 
     // 数据管理
     QList<AisGenerationTask> m_aisTasks;
@@ -111,7 +220,10 @@ private:
     int m_udpPort;
     int m_sendInterval;
     
-    // 新增：船舶图层
+    // AIS消息生成器
+    AISMessageGenerator m_aisGenerator;
+    
+    // 船舶图层
     VesselsLayer *m_vesselsLayer;
 };
 

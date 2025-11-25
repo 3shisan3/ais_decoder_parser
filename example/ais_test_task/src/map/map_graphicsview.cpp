@@ -347,7 +347,10 @@ void SsMapGraphicsView::mousePressEvent(QMouseEvent *event)
     QGraphicsView::mousePressEvent(event);
 }
 
-// 修改mouseMoveEvent以支持tooltip
+/**
+ * @brief 鼠标移动事件（修改版）
+ * 支持tooltip持续更新
+ */
 void SsMapGraphicsView::mouseMoveEvent(QMouseEvent *event)
 {
     QGraphicsView::mouseMoveEvent(event);
@@ -356,10 +359,27 @@ void SsMapGraphicsView::mouseMoveEvent(QMouseEvent *event)
         setCenter(currentCenter());
         hideTooltip();  // 拖动时隐藏tooltip
     } else {
-        // 更新鼠标位置并启动tooltip定时器
+        // 更新鼠标位置
         m_currentMousePos = event->pos();
-        m_tooltipTimer->start();
+        
+        // 如果tooltip已经显示，立即更新
+        if (m_tooltipVisible) {
+            updateTooltip();
+        } else {
+            // 否则启动延迟显示定时器
+            m_tooltipTimer->start(500); // 500ms后显示
+        }
     }
+}
+
+/**
+ * @brief 鼠标离开事件
+ * 确保鼠标离开视口时隐藏tooltip
+ */
+void SsMapGraphicsView::leaveEvent(QEvent *event)
+{
+    QGraphicsView::leaveEvent(event);
+    hideTooltip();
 }
 
 /**
@@ -728,11 +748,12 @@ void SsMapGraphicsView::renderLayers(QPainter *painter)
     painter->restore();
 }
 
-// 新增：更新tooltip
+/**
+ * @brief 更新tooltip（定时器触发）
+ * 当鼠标悬停时显示船舶信息并持续更新
+ */
 void SsMapGraphicsView::updateTooltip()
 {
-    hideTooltip();
-    
     // 查找所有VesselsLayer
     for (BaseLayer* layer : m_layers) {
         VesselsLayer* vesselsLayer = dynamic_cast<VesselsLayer*>(layer);
@@ -746,24 +767,36 @@ void SsMapGraphicsView::updateTooltip()
             );
             
             if (info) {
+                // 找到船舶，显示或更新tooltip
                 showTooltip(m_currentMousePos, *info);
+                
+                // 重启定时器以持续更新
+                m_tooltipTimer->start(100); // 100ms刷新一次
                 return;
             }
         }
     }
+    
+    // 没有找到船舶，隐藏tooltip
+    hideTooltip();
 }
 
-// 新增：显示tooltip
+/**
+ * @brief 显示tooltip
+ * @param pos 鼠标位置
+ * @param info 船舶信息
+ */
 void SsMapGraphicsView::showTooltip(const QPointF &pos, const VesselDisplayInfo &info)
 {
-    // 构建tooltip文本
+    // 构建tooltip文本（添加更多信息）
     QString tooltipText = QString(
-        "MMSI: %1\n"
-        "Name: %2\n"
-        "Lat: %3\n"
-        "Lon: %4\n"
-        "Heading: %5°\n"
-        "Speed: %6 kts"
+        "<b>MMSI:</b> %1<br>"
+        "<b>Name:</b> %2<br>"
+        "<b>Position:</b><br>"
+        "  Lat: %3<br>"
+        "  Lon: %4<br>"
+        "<b>Heading:</b> %5°<br>"
+        "<b>Speed:</b> %6 kts"
     ).arg(info.mmsi)
      .arg(info.vesselName)
      .arg(info.position.latitude(), 0, 'f', 6)
@@ -776,22 +809,22 @@ void SsMapGraphicsView::showTooltip(const QPointF &pos, const VesselDisplayInfo 
         m_tooltipText = new QGraphicsTextItem();
         m_tooltipText->setDefaultTextColor(Qt::black);
         QFont font;
-        font.setPointSize(10);
-        font.setBold(true);
+        font.setFamily("Arial");
+        font.setPointSize(9);
         m_tooltipText->setFont(font);
         m_tooltipText->setZValue(10000);
         m_scene->addItem(m_tooltipText);
     }
-    m_tooltipText->setPlainText(tooltipText);
+    m_tooltipText->setHtml(tooltipText);
 
     // 创建或更新背景矩形
     QRectF textRect = m_tooltipText->boundingRect();
-    textRect.adjust(-5, -3, 5, 3);
+    textRect.adjust(-8, -5, 8, 5);
     
     if (!m_tooltipItem) {
         m_tooltipItem = new QGraphicsRectItem();
-        m_tooltipItem->setBrush(QColor(255, 255, 220, 230));
-        m_tooltipItem->setPen(QPen(Qt::black, 2));
+        m_tooltipItem->setBrush(QColor(255, 255, 240, 245));
+        m_tooltipItem->setPen(QPen(QColor(100, 100, 100), 2));
         m_tooltipItem->setZValue(9999);
         m_scene->addItem(m_tooltipItem);
     }
@@ -799,16 +832,22 @@ void SsMapGraphicsView::showTooltip(const QPointF &pos, const VesselDisplayInfo 
 
     // 计算tooltip位置（在鼠标右侧）
     QPointF scenePos = mapToScene(pos.toPoint());
-    QPointF tooltipPos = scenePos + QPointF(20, -textRect.height() / 2);
+    QPointF tooltipPos = scenePos + QPointF(25, -textRect.height() / 2);
     
     // 确保tooltip不会超出视口
     QRectF viewRect = mapToScene(viewport()->rect()).boundingRect();
+    
+    // 右边界检查
     if (tooltipPos.x() + textRect.width() > viewRect.right()) {
-        tooltipPos.setX(scenePos.x() - textRect.width() - 20);
+        tooltipPos.setX(scenePos.x() - textRect.width() - 25); // 显示在左侧
     }
+    
+    // 上边界检查
     if (tooltipPos.y() < viewRect.top()) {
         tooltipPos.setY(viewRect.top());
     }
+    
+    // 下边界检查
     if (tooltipPos.y() + textRect.height() > viewRect.bottom()) {
         tooltipPos.setY(viewRect.bottom() - textRect.height());
     }
@@ -821,7 +860,9 @@ void SsMapGraphicsView::showTooltip(const QPointF &pos, const VesselDisplayInfo 
     m_tooltipVisible = true;
 }
 
-// 新增:隐藏tooltip
+/**
+ * @brief 隐藏tooltip
+ */
 void SsMapGraphicsView::hideTooltip()
 {
     if (m_tooltipItem) {

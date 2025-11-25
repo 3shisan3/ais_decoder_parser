@@ -78,6 +78,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
     // 重写手势事件
     bool event(QEvent *event) override;
@@ -89,7 +90,7 @@ private slots:
     void handleTileReceived(int x, int y, int z, const QPixmap& tile);
     void handleTileFailed(int x, int y, int z, const QString& error);
     void handleLayerUpdateRequested();
-    void updateTooltip();  // 新增：更新tooltip定时器槽
+    void updateTooltip();  // 更新tooltip定时器槽
 
 protected:
     // 坐标转换
