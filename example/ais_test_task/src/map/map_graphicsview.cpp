@@ -17,12 +17,15 @@
 /**
  * @brief 构造函数，初始化地图视图
  */
-SsMapGraphicsView::SsMapGraphicsView(QWidget *parent)
+SsMapGraphicsView::SsMapGraphicsView(QWidget* parent)
     : QGraphicsView(parent)
     , m_maxZoomLevel(22.0)
     , m_scene(new QGraphicsScene(this))
-    , m_tileLoader(new SsOnlineTileLoader())  // 无父对象
+    , m_tileLoader(new SsOnlineTileLoader())
     , m_diskCache(QCoreApplication::applicationDirPath() + "/map_tiles")
+    , m_tooltipTimer(new QTimer(this))  // 新增
+    , m_tooltipItem(nullptr)            // 新增
+    , m_tooltipText(nullptr)            // 新增
 {
     // 基础设置
     setScene(m_scene);  // QGraphicsView 默认 paintevent 绘制 QGraphicsScene 的内容
@@ -71,19 +74,37 @@ SsMapGraphicsView::SsMapGraphicsView(QWidget *parent)
     // 连接信号槽(自动跨线程工作)
     connect(m_tileLoader, &SsOnlineTileLoader::tileReceived, this, &SsMapGraphicsView::handleTileReceived);
     connect(m_tileLoader, &SsOnlineTileLoader::tileFailed, this, &SsMapGraphicsView::handleTileFailed);
+
+    // 新增：设置tooltip定时器
+    m_tooltipTimer->setSingleShot(true);
+    m_tooltipTimer->setInterval(500);  // 500ms后显示tooltip
+    connect(m_tooltipTimer, &QTimer::timeout, this, &SsMapGraphicsView::updateTooltip);
+    
+    // 启用鼠标跟踪（用于tooltip）
+    setMouseTracking(true);
 }
 
+// 新增：在析构函数中清理tooltip
 SsMapGraphicsView::~SsMapGraphicsView()
 {
     clearLayers();
 
-    // 停止瓦片加载线程
+    if (m_tooltipItem) {
+        m_scene->removeItem(m_tooltipItem);
+        delete m_tooltipItem;
+    }
+    if (m_tooltipText) {
+        m_scene->removeItem(m_tooltipText);
+        delete m_tooltipText;
+    }
+
     if(m_tileLoader)
     {
         m_tileLoader->stop();
-        delete m_tileLoader;  // 手动释放
+        delete m_tileLoader;
     }
 }
+
 
 /**
  * @brief 获取当前视图中心点对应的地理坐标
@@ -266,8 +287,11 @@ void SsMapGraphicsView::setTileUrlTemplate(const QString &urlTemplate, const QSt
 /**
  * @brief 鼠标滚轮事件处理，实现地图缩放
  */
+// 修改wheelEvent在缩放时隐藏tooltip
 void SsMapGraphicsView::wheelEvent(QWheelEvent *event)
 {
+    hideTooltip();  // 缩放时隐藏tooltip
+    
     // 计算缩放级别变化
     double zoomDelta = event->angleDelta().y() > 0 ? 1 : -1;
     double newZoom = qBound(1.0, m_zoomLevel + zoomDelta, m_maxZoomLevel);
@@ -323,15 +347,18 @@ void SsMapGraphicsView::mousePressEvent(QMouseEvent *event)
     QGraphicsView::mousePressEvent(event);
 }
 
-/**
- * @brief 鼠标移动事件处理，实现地图拖动
- */
+// 修改mouseMoveEvent以支持tooltip
 void SsMapGraphicsView::mouseMoveEvent(QMouseEvent *event)
 {
     QGraphicsView::mouseMoveEvent(event);
-    if (m_isDragging)
-    {
+    
+    if (m_isDragging) {
         setCenter(currentCenter());
+        hideTooltip();  // 拖动时隐藏tooltip
+    } else {
+        // 更新鼠标位置并启动tooltip定时器
+        m_currentMousePos = event->pos();
+        m_tooltipTimer->start();
     }
 }
 
@@ -700,3 +727,110 @@ void SsMapGraphicsView::renderLayers(QPainter *painter)
     // 恢复视图变换
     painter->restore();
 }
+
+// 新增：更新tooltip
+void SsMapGraphicsView::updateTooltip()
+{
+    hideTooltip();
+    
+    // 查找所有VesselsLayer
+    for (BaseLayer* layer : m_layers) {
+        VesselsLayer* vesselsLayer = dynamic_cast<VesselsLayer*>(layer);
+        if (vesselsLayer && vesselsLayer->isVisible()) {
+            const VesselDisplayInfo* info = vesselsLayer->getVesselAtPosition(
+                m_currentMousePos,
+                viewport()->size(),
+                m_center,
+                m_zoomLevel,
+                m_tileAlgorithm
+            );
+            
+            if (info) {
+                showTooltip(m_currentMousePos, *info);
+                return;
+            }
+        }
+    }
+}
+
+// 新增：显示tooltip
+void SsMapGraphicsView::showTooltip(const QPointF &pos, const VesselDisplayInfo &info)
+{
+    // 构建tooltip文本
+    QString tooltipText = QString(
+        "MMSI: %1\n"
+        "Name: %2\n"
+        "Lat: %3\n"
+        "Lon: %4\n"
+        "Heading: %5°\n"
+        "Speed: %6 kts"
+    ).arg(info.mmsi)
+     .arg(info.vesselName)
+     .arg(info.position.latitude(), 0, 'f', 6)
+     .arg(info.position.longitude(), 0, 'f', 6)
+     .arg(info.heading, 0, 'f', 1)
+     .arg(info.speed, 0, 'f', 1);
+
+    // 创建或更新文本项
+    if (!m_tooltipText) {
+        m_tooltipText = new QGraphicsTextItem();
+        m_tooltipText->setDefaultTextColor(Qt::black);
+        QFont font;
+        font.setPointSize(10);
+        font.setBold(true);
+        m_tooltipText->setFont(font);
+        m_tooltipText->setZValue(10000);
+        m_scene->addItem(m_tooltipText);
+    }
+    m_tooltipText->setPlainText(tooltipText);
+
+    // 创建或更新背景矩形
+    QRectF textRect = m_tooltipText->boundingRect();
+    textRect.adjust(-5, -3, 5, 3);
+    
+    if (!m_tooltipItem) {
+        m_tooltipItem = new QGraphicsRectItem();
+        m_tooltipItem->setBrush(QColor(255, 255, 220, 230));
+        m_tooltipItem->setPen(QPen(Qt::black, 2));
+        m_tooltipItem->setZValue(9999);
+        m_scene->addItem(m_tooltipItem);
+    }
+    m_tooltipItem->setRect(textRect);
+
+    // 计算tooltip位置（在鼠标右侧）
+    QPointF scenePos = mapToScene(pos.toPoint());
+    QPointF tooltipPos = scenePos + QPointF(20, -textRect.height() / 2);
+    
+    // 确保tooltip不会超出视口
+    QRectF viewRect = mapToScene(viewport()->rect()).boundingRect();
+    if (tooltipPos.x() + textRect.width() > viewRect.right()) {
+        tooltipPos.setX(scenePos.x() - textRect.width() - 20);
+    }
+    if (tooltipPos.y() < viewRect.top()) {
+        tooltipPos.setY(viewRect.top());
+    }
+    if (tooltipPos.y() + textRect.height() > viewRect.bottom()) {
+        tooltipPos.setY(viewRect.bottom() - textRect.height());
+    }
+
+    m_tooltipItem->setPos(tooltipPos);
+    m_tooltipText->setPos(tooltipPos);
+    
+    m_tooltipItem->setVisible(true);
+    m_tooltipText->setVisible(true);
+    m_tooltipVisible = true;
+}
+
+// 新增:隐藏tooltip
+void SsMapGraphicsView::hideTooltip()
+{
+    if (m_tooltipItem) {
+        m_tooltipItem->setVisible(false);
+    }
+    if (m_tooltipText) {
+        m_tooltipText->setVisible(false);
+    }
+    m_tooltipVisible = false;
+    m_tooltipTimer->stop();
+}
+

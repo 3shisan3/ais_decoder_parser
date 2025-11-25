@@ -17,6 +17,7 @@
 #include <QGroupBox>
 
 #include "map/multi_mapview.h"
+#include "map/layers/vessels_layer.h"  // 新增：船舶图层
 #include "udp-tcp-communicate/communicate_api.h"
 
 // AIS船舶信息结构
@@ -33,7 +34,7 @@ struct AisVesselInfo {
     double draft;
     double speed; // 节
     double heading; // 度
-    QGeoCoordinate position; // 添加位置字段
+    QGeoCoordinate position; // 位置
 };
 
 // AIS任务结构
@@ -80,6 +81,9 @@ private:
     AisVesselInfo generateRandomVesselInfo();
     std::string generateAisMessage(const AisVesselInfo &vessel, const QGeoCoordinate &position);
     void logMessage(const QString &message);
+    
+    // 新增：更新地图上的船舶显示
+    void updateVesselDisplay(const AisGenerationTask &task);
 
     // UI组件
     SsMultiMapView *m_mapView;
@@ -106,6 +110,9 @@ private:
     QString m_udpHost;
     int m_udpPort;
     int m_sendInterval;
+    
+    // 新增：船舶图层
+    VesselsLayer *m_vesselsLayer;
 };
 
 #endif // MAIN_WINDOW_H

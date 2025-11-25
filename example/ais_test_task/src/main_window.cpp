@@ -146,6 +146,13 @@ MainWindow::MainWindow(QWidget *parent)
     setupUi();
     setupConnections();
     
+    // 新增：初始化船舶图层
+    m_vesselsLayer = new VesselsLayer(this);
+    m_mapView->addLayer(m_vesselsLayer);
+    m_vesselsLayer->setVisible(true);
+    m_vesselsLayer->setShowVesselNames(true);
+    m_vesselsLayer->setVesselIconSize(20);
+    
     // 初始化定时器
     m_generationTimer = new QTimer(this);
     m_generationTimer->setInterval(1000);
@@ -170,6 +177,28 @@ MainWindow::~MainWindow()
     communicate::Destroy();
 }
 
+// 新增：更新地图上的船舶显示
+void MainWindow::updateVesselDisplay(const AisGenerationTask &task)
+{
+    if (!task.vesselInfo.position.isValid()) {
+        return;
+    }
+    
+    // 构建船舶显示信息
+    VesselDisplayInfo displayInfo;
+    displayInfo.mmsi = task.vesselInfo.mmsi;
+    displayInfo.vesselName = task.vesselInfo.vesselName;
+    displayInfo.position = task.vesselInfo.position;
+    displayInfo.heading = task.vesselInfo.heading;
+    displayInfo.speed = task.vesselInfo.speed;
+    displayInfo.color = task.vesselInfo.vesselColor;
+    displayInfo.vesselId = task.vesselInfo.vesselId;
+    
+    // 更新船舶图层
+    m_vesselsLayer->updateVessel(task.vesselInfo.vesselId, displayInfo);
+}
+
+// setupUi保持原样，但确保地图初始化时设置合适的中心点
 void MainWindow::setupUi()
 {
     // 设置主窗口
@@ -181,7 +210,7 @@ void MainWindow::setupUi()
     setCentralWidget(m_mapView);
     m_mapView->setTileUrlTemplate("https://wprd01.is.autonavi.com/appmaptile?&style=6&lang=zh_cn&scl=1&ltype=0&x={x}&y={y}&z={z}");
     m_mapView->setCenter(QGeoCoordinate(31.2304, 121.4737)); // 上海
-    m_mapView->setZoomLevel(18);
+    m_mapView->setZoomLevel(15);  // 调整初始缩放级别以便看到船舶
     
     // 创建任务停靠窗口
     m_taskDock = new QDockWidget("AIS任务管理", this);
@@ -453,6 +482,7 @@ void MainWindow::onStartAisGeneration()
     }
 }
 
+// 修改onStopAisGeneration，停止任务时可以选择是否从地图移除船舶
 void MainWindow::onStopAisGeneration()
 {
     QList<QListWidgetItem*> selectedItems = m_taskList->selectedItems();
@@ -466,11 +496,16 @@ void MainWindow::onStopAisGeneration()
             task.isActive = false;
             m_statusLabel->setText(QString("已停止任务: %1").arg(task.taskName));
             logMessage(QString("停止任务: %1").arg(task.taskName));
+            
+            // 可选：停止时从地图移除船舶（如果需要保留船舶在地图上，注释掉下面这行）
+            // m_vesselsLayer->removeVessel(task.vesselInfo.vesselId);
+            
             break;
         }
     }
 }
 
+// 修改onDeleteTask，删除任务时也从地图移除船舶
 void MainWindow::onDeleteTask()
 {
     QList<QListWidgetItem*> selectedItems = m_taskList->selectedItems();
@@ -482,6 +517,11 @@ void MainWindow::onDeleteTask()
     for (int i = 0; i < m_aisTasks.size(); ++i) {
         if (m_aisTasks[i].taskId == taskId) {
             QString taskName = m_aisTasks[i].taskName;
+            QString vesselId = m_aisTasks[i].vesselInfo.vesselId;
+            
+            // 新增：从地图移除船舶
+            m_vesselsLayer->removeVessel(vesselId);
+            
             m_aisTasks.removeAt(i);
             delete m_taskList->takeItem(m_taskList->row(selectedItems.first()));
             m_statusLabel->setText("已删除任务");
@@ -525,6 +565,7 @@ void MainWindow::onClearLog()
     m_logTextEdit->clear();
 }
 
+// 修改onGenerateAisData，在计算位置后更新地图显示
 void MainWindow::onGenerateAisData()
 {
     QDateTime currentTime = QDateTime::currentDateTime();
@@ -578,6 +619,9 @@ void MainWindow::onGenerateAisData()
             if (task.vesselInfo.heading < 0) {
                 task.vesselInfo.heading += 360.0;
             }
+            
+            // 新增：更新地图上的船舶显示
+            updateVesselDisplay(task);
         }
     }
 }
