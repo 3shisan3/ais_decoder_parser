@@ -68,6 +68,9 @@ set(QT_DEPEND_LIBS
 # 设置可执行程序输出路径
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${AIS_SOURCES_ROOT}/bin/ais_test_task)
 
+include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_CFG.cmake)
+include(${AIS_SOURCES_ROOT}/cmake/IncludeDirectories_AIS.cmake)
+
 include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/src
 )
@@ -82,6 +85,7 @@ add_executable(ais_test_task WIN32 ${AIS_TEST_SOURCES})
 target_link_libraries(ais_test_task
     PRIVATE ${QT_DEPEND_LIBS}
     PRIVATE udp-tcp-communicate
+    PRIVATE ais_parser
 )
 
 # 添加Windows Socket库链接

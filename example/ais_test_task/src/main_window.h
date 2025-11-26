@@ -17,6 +17,7 @@
 #include <QGroupBox>
 #include <QCheckBox>
 #include <QSet>
+#include <QComboBox>
 
 #include "map/multi_mapview.h"
 #include "map/layers/vessels_layer.h"
@@ -37,7 +38,7 @@ struct AisVesselInfo {
     double draft;
     double speed; // 节
     double heading; // 度
-    double courseOverGround; // 对地航向（度）- 新增字段
+    double courseOverGround; // 对地航向（度）
     QGeoCoordinate position; // 位置
     int navigationStatus;
     int rateOfTurn;
@@ -47,8 +48,8 @@ struct AisVesselInfo {
     int etaHour;
     int etaMinute;
     
-    // 记录启用的消息类型
-    QSet<AISMessageType> enabledMessageTypes;
+    // 固定消息类型（创建时确定）
+    AISMessageType messageType;
 };
 
 // AIS任务结构
@@ -62,7 +63,7 @@ struct AisGenerationTask {
     QDateTime startTime;
     int currentPointIndex;
     double progressAlongSegment;
-    int messageCounter; // 消息计数器，用于轮换消息类型
+    int messageCounter;
 };
 
 /**
@@ -90,7 +91,6 @@ private slots:
     // 配置相关
     void onSendIntervalChanged(int interval);
     void onUdpSettingsChanged();
-    void onMessageTypeChanged();
     
     // 数据生成和发送
     void onGenerateAisData();
@@ -118,8 +118,9 @@ private:
      * @brief 创建AIS任务
      * @param taskName 任务名称
      * @param route 航线路径
+     * @param messageType 消息类型
      */
-    void createAisTask(const QString &taskName, const QVector<QGeoCoordinate> &route);
+    void createAisTask(const QString &taskName, const QVector<QGeoCoordinate> &route, AISMessageType messageType);
     
     /**
      * @brief 生成随机MMSI号
@@ -135,9 +136,10 @@ private:
     
     /**
      * @brief 生成随机船舶信息
+     * @param messageType 消息类型
      * @return 船舶信息结构
      */
-    AisVesselInfo generateRandomVesselInfo();
+    AisVesselInfo generateRandomVesselInfo(AISMessageType messageType);
     
     /**
      * @brief 根据船舶信息和消息类型生成AIS消息
@@ -160,12 +162,6 @@ private:
     void updateVesselDisplay(const AisGenerationTask &task);
     
     /**
-     * @brief 获取当前启用的消息类型列表
-     * @return 消息类型集合
-     */
-    QSet<AISMessageType> getEnabledMessageTypes() const;
-    
-    /**
      * @brief 将AisVesselInfo转换为AISVesselData
      * @param vesselInfo 船舶信息
      * @return AIS船舶数据
@@ -185,6 +181,13 @@ private:
      * @return 航线路径
      */
     QVector<QGeoCoordinate> generateRandomRoute(const QGeoCoordinate& startPos, int numPoints);
+    
+    /**
+     * @brief 获取消息类型名称
+     * @param type 消息类型
+     * @return 类型名称
+     */
+    QString getMessageTypeName(AISMessageType type) const;
 
     // UI组件
     SsMultiMapView *m_mapView;
@@ -203,12 +206,8 @@ private:
     QPushButton *m_clearLogButton;
     QPushButton *m_toggleTaskDockButton;
     
-    // 消息类型选择复选框
-    QCheckBox *m_type1CheckBox;
-    QCheckBox *m_type5CheckBox;
-    QCheckBox *m_type18CheckBox;
-    QCheckBox *m_type19CheckBox;
-    QCheckBox *m_type24CheckBox;
+    // 消息类型选择
+    QComboBox *m_messageTypeComboBox;
 
     // 数据管理
     QList<AisGenerationTask> m_aisTasks;

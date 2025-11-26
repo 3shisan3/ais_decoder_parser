@@ -1,490 +1,602 @@
 #include "ais_message_generator.h"
+
+#include <QRandomGenerator>
 #include <QDateTime>
-#include <QtMath>
-#include <cmath>
 
-AISMessageGenerator::AISMessageGenerator()
+AISMessageGenerator::AISMessageGenerator(QObject *parent)
+    : QObject(parent)
+    , m_encoder(ais::AISGenerateCfg())
 {
 }
 
-// 辅助函数：添加二进制位
-void AISMessageGenerator::appendBits(std::vector<bool>& bits, uint32_t value, size_t bitCount)
+std::string AISMessageGenerator::generateType1Message(const AISVesselData &data)
 {
-    for (int i = static_cast<int>(bitCount) - 1; i >= 0; i--) {
-        bits.push_back((value >> i) & 1);
-    }
+    auto message = std::make_unique<ais::PositionReport>();
+    message->type = ais::AISMessageType::POSITION_REPORT_CLASS_A;
+    message->mmsi = data.mmsi;
+    
+    fillPositionReportFields(*message, data);
+    
+    // Type 1特定字段
+    message->navigationStatus = data.navigationStatus;
+    message->rateOfTurn = data.rateOfTurn;
+    message->timestampUTC = QDateTime::currentDateTime().time().second();
+    message->specialManeuver = 0;
+    message->communicationState = generateCommunicationState();
+    
+    return encodeMessage(*message);
 }
 
-// 辅助函数：添加有符号整数
-void AISMessageGenerator::appendSignedBits(std::vector<bool>& bits, int32_t value, size_t bitCount)
+std::string AISMessageGenerator::generateType2Message(const AISVesselData &data)
 {
-    if (value < 0) {
-        // 计算补码
-        uint32_t mask = (1UL << bitCount) - 1;
-        uint32_t absValue = static_cast<uint32_t>(std::abs(value));
-        uint32_t complement = (~absValue + 1) & mask;
-        appendBits(bits, complement, bitCount);
-    } else {
-        appendBits(bits, static_cast<uint32_t>(value), bitCount);
-    }
+    auto message = std::make_unique<ais::PositionReportAssigned>();
+    message->type = ais::AISMessageType::POSITION_REPORT_CLASS_A_ASSIGNED;
+    message->mmsi = data.mmsi;
+    
+    // 使用模板版本的填充函数
+    fillPositionReportFields(*message, data);
+    
+    // Type 2特定字段
+    message->navigationStatus = data.navigationStatus;
+    message->rateOfTurn = data.rateOfTurn;
+    message->timestampUTC = QDateTime::currentDateTime().time().second();
+    message->specialManeuver = 0;
+    message->communicationState = generateCommunicationState();
+    
+    return encodeMessage(*message);
 }
 
-// 辅助函数：添加布尔值
-void AISMessageGenerator::appendBool(std::vector<bool>& bits, bool value)
+std::string AISMessageGenerator::generateType3Message(const AISVesselData &data)
 {
-    bits.push_back(value);
+    auto message = std::make_unique<ais::PositionReportResponse>();
+    message->type = ais::AISMessageType::POSITION_REPORT_CLASS_A_RESPONSE;
+    message->mmsi = data.mmsi;
+    
+    // 使用模板版本的填充函数
+    fillPositionReportFields(*message, data);
+    
+    // Type 3特定字段
+    message->navigationStatus = data.navigationStatus;
+    message->rateOfTurn = data.rateOfTurn;
+    message->timestampUTC = QDateTime::currentDateTime().time().second();
+    message->specialManeuver = 0;
+    message->communicationState = generateCommunicationState();
+    
+    return encodeMessage(*message);
 }
 
-// 辅助函数：添加字符串（6-bit ASCII编码）
-void AISMessageGenerator::appendString(std::vector<bool>& bits, const QString& text, size_t maxBits)
+std::string AISMessageGenerator::generateType4Message(const AISVesselData &data)
 {
-    int maxChars = maxBits / 6;
-    QString paddedText = text.left(maxChars);
+    auto message = std::make_unique<ais::BaseStationReport>();
+    message->type = ais::AISMessageType::BASE_STATION_REPORT;
+    message->mmsi = data.mmsi;
     
-    // 填充到指定长度
-    while (paddedText.length() < maxChars) {
-        paddedText.append('@'); // @ 表示空格或填充
-    }
+    // 基站特定字段
+    QDateTime currentTime = QDateTime::currentDateTime();
+    message->year = currentTime.date().year();
+    message->month = currentTime.date().month();
+    message->day = currentTime.date().day();
+    message->hour = currentTime.time().hour();
+    message->minute = currentTime.time().minute();
+    message->second = currentTime.time().second();
     
-    for (int i = 0; i < paddedText.length(); i++) {
-        QChar c = paddedText[i];
-        int charValue = 0;
-        
-        // AIS 6-bit ASCII编码规则
-        if (c >= '@' && c <= '_') {
-            charValue = c.unicode() - 64; // '@'=0, 'A'=1, ..., '_'=31
-        } else if (c >= ' ' && c <= '?') {
-            charValue = c.unicode(); // 保持原值
-        } else {
-            charValue = 0; // 无效字符用空格代替
-        }
-        
-        charValue &= 0x3F; // 只取6位
-        appendBits(bits, charValue, 6);
-    }
+    message->positionAccuracy = true;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->epfdType = data.epfdType;
+    message->raimFlag = false;
+    message->communicationState = generateCommunicationState();
+    
+    return encodeMessage(*message);
 }
 
-// 辅助函数：二进制编码为6-bit ASCII
-std::string AISMessageGenerator::encodeTo6bitAscii(const std::vector<bool>& bits)
+std::string AISMessageGenerator::generateType5Message(const AISVesselData &data)
 {
-    std::string result;
-    size_t totalBits = bits.size();
+    auto message = std::make_unique<ais::StaticVoyageData>();
+    message->type = ais::AISMessageType::STATIC_VOYAGE_DATA;
+    message->mmsi = data.mmsi;
     
-    // 填充到6的倍数
-    size_t padding = (6 - (totalBits % 6)) % 6;
-    std::vector<bool> paddedBits = bits;
-    for (size_t i = 0; i < padding; i++) {
-        paddedBits.push_back(false);
-    }
+    fillStaticDataFields(*message, data);
     
-    // 每6位转换为一个字符
-    for (size_t i = 0; i < paddedBits.size(); i += 6) {
-        uint8_t value = 0;
-        for (int j = 0; j < 6; j++) {
-            if (paddedBits[i + j]) {
-                value |= (1 << (5 - j));
-            }
-        }
-        
-        // AIS 6-bit ASCII到可打印字符的转换
-        if (value < 40) {
-            value += 48; // 0-39 -> 48-87 ('0'-'W')
-        } else {
-            value += 56; // 40-63 -> 96-119 ('`'-'w')
-        }
-        
-        result += static_cast<char>(value);
-    }
-    
-    return result;
+    return encodeMessage(*message);
 }
 
-// 辅助函数：计算NMEA校验和
-QString AISMessageGenerator::calculateNmeaChecksum(const QString& data)
+std::string AISMessageGenerator::generateType6Message(const AISVesselData &data)
 {
-    uint8_t checksum = 0;
-    QByteArray bytes = data.toUtf8();
+    auto message = std::make_unique<ais::BinaryAddressedMessage>();
+    message->type = ais::AISMessageType::BINARY_ADDRESSED_MESSAGE;
+    message->mmsi = data.mmsi;
     
-    for (int i = 0; i < bytes.length(); i++) {
-        char c = bytes[i];
-        if (c == '$') continue;
-        if (c == '*') break;
-        checksum ^= static_cast<uint8_t>(c);
-    }
+    message->sequenceNumber = 0;
+    message->destinationMmsi = data.destinationMmsi;
+    message->retransmitFlag = false;
+    message->designatedAreaCode = data.designatedAreaCode;
+    message->functionalId = data.functionalId;
+    message->binaryData = data.binaryData;
     
-    return QString("%1").arg(checksum, 2, 16, QLatin1Char('0')).toUpper();
+    return encodeMessage(*message);
 }
 
-// 辅助函数：构建NMEA语句
-std::string AISMessageGenerator::buildNmeaSentence(const std::string& payload, int fillBits)
+std::string AISMessageGenerator::generateType7Message(const AISVesselData &data)
 {
-    QString nmeaBody = QString("AIVDM,1,1,,A,%1,%2")
-        .arg(QString::fromStdString(payload))
-        .arg(fillBits);
+    auto message = std::make_unique<ais::BinaryAcknowledge>();
+    message->type = ais::AISMessageType::BINARY_ACKNOWLEDGE;
+    message->mmsi = data.mmsi;
     
-    QString checksum = calculateNmeaChecksum(nmeaBody);
-    QString nmeaMessage = QString("!%1*%2\r\n").arg(nmeaBody).arg(checksum);
+    message->sequenceNumber = 0;
+    message->destinationMmsi1 = data.destinationMmsi;
     
-    return nmeaMessage.toStdString();
+    return encodeMessage(*message);
 }
 
-// 生成Type 1消息：A类位置报告
-std::string AISMessageGenerator::generateType1Message(const AISVesselData& vesselData)
+std::string AISMessageGenerator::generateType8Message(const AISVesselData &data)
 {
-    std::vector<bool> bits;
+    auto message = std::make_unique<ais::BinaryBroadcastMessage>();
+    message->type = ais::AISMessageType::BINARY_BROADCAST_MESSAGE;
+    message->mmsi = data.mmsi;
     
-    // 1. 消息类型 (6 bits)
-    appendBits(bits, 1, 6);
+    message->spare = 0;
+    message->designatedAreaCode = data.designatedAreaCode;
+    message->functionalId = data.functionalId;
+    message->binaryData = data.binaryData;
     
-    // 2. 重复指示符 (2 bits)
-    appendBits(bits, 0, 2);
-    
-    // 3. MMSI (30 bits)
-    appendBits(bits, vesselData.mmsi, 30);
-    
-    // 4. 导航状态 (4 bits)
-    appendBits(bits, vesselData.navigationStatus, 4);
-    
-    // 5. 转向率 (8 bits)
-    appendSignedBits(bits, vesselData.rateOfTurn, 8);
-    
-    // 6. 对地速度 (10 bits) - 节*10
-    uint32_t sog = static_cast<uint32_t>(vesselData.speed * 10.0);
-    if (sog > 1022) sog = 1023;
-    appendBits(bits, sog, 10);
-    
-    // 7. 位置精度 (1 bit) - 1: 高精度
-    appendBool(bits, true);
-    
-    // 8. 经度 (28 bits) - 度*600000
-    int32_t lonValue = static_cast<int32_t>(vesselData.position.longitude() * 600000.0);
-    appendSignedBits(bits, lonValue, 28);
-    
-    // 9. 纬度 (27 bits) - 度*600000
-    int32_t latValue = static_cast<int32_t>(vesselData.position.latitude() * 600000.0);
-    appendSignedBits(bits, latValue, 27);
-    
-    // 10. 对地航向 (12 bits) - 度*10
-    uint32_t cog = static_cast<uint32_t>(vesselData.courseOverGround * 10.0);
-    if (cog >= 3600) cog = 3600;
-    appendBits(bits, cog, 12);
-    
-    // 11. 真航向 (9 bits)
-    uint32_t heading = static_cast<uint32_t>(vesselData.heading);
-    if (heading > 359) heading = 511;
-    appendBits(bits, heading, 9);
-    
-    // 12. 时间戳 (6 bits)
-    QDateTime utc = QDateTime::currentDateTimeUtc();
-    appendBits(bits, utc.time().second(), 6);
-    
-    // 13. 特殊操纵指示 (2 bits)
-    appendBits(bits, 0, 2);
-    
-    // 14. 备用位 (3 bits)
-    appendBits(bits, 0, 3);
-    
-    // 15. RAIM标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 16. 通信状态 (19 bits)
-    appendBits(bits, 0, 19);
-    
-    // 编码并构建NMEA语句
-    std::string payload = encodeTo6bitAscii(bits);
-    int fillBits = (6 - (bits.size() % 6)) % 6;
-    
-    return buildNmeaSentence(payload, fillBits);
+    return encodeMessage(*message);
 }
 
-// 生成Type 5消息：静态和航程数据
-std::string AISMessageGenerator::generateType5Message(const AISVesselData& vesselData)
+std::string AISMessageGenerator::generateType9Message(const AISVesselData &data)
 {
-    std::vector<bool> bits;
+    auto message = std::make_unique<ais::StandardSARAircraftReport>();
+    message->type = ais::AISMessageType::STANDARD_SAR_AIRCRAFT_REPORT;
+    message->mmsi = data.mmsi;
     
-    // 1. 消息类型 (6 bits)
-    appendBits(bits, 5, 6);
+    // SAR飞机特定字段
+    message->altitude = 1000; // 默认海拔高度
+    message->speedOverGround = data.speed;
+    message->positionAccuracy = true;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->courseOverGround = data.courseOverGround;
+    message->timestampUTC = QDateTime::currentDateTime().time().second();
+    message->spare = 0;
+    message->assignedModeFlag = false;
+    message->raimFlag = false;
+    message->communicationState = generateCommunicationState();
     
-    // 2. 重复指示符 (2 bits)
-    appendBits(bits, 0, 2);
-    
-    // 3. MMSI (30 bits)
-    appendBits(bits, vesselData.mmsi, 30);
-    
-    // 4. AIS版本 (2 bits)
-    appendBits(bits, 0, 2);
-    
-    // 5. IMO编号 (30 bits)
-    appendBits(bits, vesselData.imo, 30);
-    
-    // 6. 呼号 (42 bits = 7字符)
-    appendString(bits, vesselData.callSign, 42);
-    
-    // 7. 船名 (120 bits = 20字符)
-    appendString(bits, vesselData.vesselName, 120);
-    
-    // 8. 船舶类型 (8 bits)
-    appendBits(bits, vesselData.shipType, 8);
-    
-    // 9. 船舶尺寸 (30 bits)
-    int dimensionToBow = vesselData.length / 2;
-    int dimensionToStern = vesselData.length - dimensionToBow;
-    int dimensionToPort = vesselData.width / 2;
-    int dimensionToStarboard = vesselData.width - dimensionToPort;
-    
-    appendBits(bits, dimensionToBow, 9);
-    appendBits(bits, dimensionToStern, 9);
-    appendBits(bits, dimensionToPort, 6);
-    appendBits(bits, dimensionToStarboard, 6);
-    
-    // 10. 定位设备类型 (4 bits) - 1: GPS
-    appendBits(bits, 1, 4);
-    
-    // 11. ETA (20 bits)
-    appendBits(bits, vesselData.etaMonth, 4);
-    appendBits(bits, vesselData.etaDay, 5);
-    appendBits(bits, vesselData.etaHour, 5);
-    appendBits(bits, vesselData.etaMinute, 6);
-    
-    // 12. 吃水深度 (8 bits) - 米*10
-    uint32_t draught = static_cast<uint32_t>(vesselData.draft * 10.0);
-    appendBits(bits, draught, 8);
-    
-    // 13. 目的地 (120 bits = 20字符)
-    appendString(bits, vesselData.destination, 120);
-    
-    // 14. DTE标志 (1 bit)
-    appendBool(bits, true);
-    
-    // 15. 备用位 (1 bit)
-    appendBool(bits, false);
-    
-    std::string payload = encodeTo6bitAscii(bits);
-    int fillBits = (6 - (bits.size() % 6)) % 6;
-    
-    return buildNmeaSentence(payload, fillBits);
+    return encodeMessage(*message);
 }
 
-// 生成Type 18消息：标准B类位置报告
-std::string AISMessageGenerator::generateType18Message(const AISVesselData& vesselData)
+std::string AISMessageGenerator::generateType10Message(const AISVesselData &data)
 {
-    std::vector<bool> bits;
+    auto message = std::make_unique<ais::UTCDateInquiry>();
+    message->type = ais::AISMessageType::UTC_DATE_INQUIRY;
+    message->mmsi = data.mmsi;
     
-    // 1. 消息类型 (6 bits)
-    appendBits(bits, 18, 6);
+    message->spare1 = 0;
+    message->destinationMmsi = data.destinationMmsi;
+    message->spare2 = 0;
     
-    // 2. 重复指示符 (2 bits)
-    appendBits(bits, 0, 2);
-    
-    // 3. MMSI (30 bits)
-    appendBits(bits, vesselData.mmsi, 30);
-    
-    // 4. 备用位 (8 bits)
-    appendBits(bits, 0, 8);
-    
-    // 5. 对地速度 (10 bits)
-    uint32_t sog = static_cast<uint32_t>(vesselData.speed * 10.0);
-    if (sog > 1022) sog = 1023;
-    appendBits(bits, sog, 10);
-    
-    // 6. 位置精度 (1 bit)
-    appendBool(bits, true);
-    
-    // 7. 经度 (28 bits)
-    int32_t lonValue = static_cast<int32_t>(vesselData.position.longitude() * 600000.0);
-    appendSignedBits(bits, lonValue, 28);
-    
-    // 8. 纬度 (27 bits)
-    int32_t latValue = static_cast<int32_t>(vesselData.position.latitude() * 600000.0);
-    appendSignedBits(bits, latValue, 27);
-    
-    // 9. 对地航向 (12 bits)
-    uint32_t cog = static_cast<uint32_t>(vesselData.courseOverGround * 10.0);
-    if (cog >= 3600) cog = 3600;
-    appendBits(bits, cog, 12);
-    
-    // 10. 真航向 (9 bits)
-    uint32_t heading = static_cast<uint32_t>(vesselData.heading);
-    if (heading > 359) heading = 511;
-    appendBits(bits, heading, 9);
-    
-    // 11. 时间戳 (6 bits)
-    QDateTime utc = QDateTime::currentDateTimeUtc();
-    appendBits(bits, utc.time().second(), 6);
-    
-    // 12. 备用位 (2 bits)
-    appendBits(bits, 0, 2);
-    
-    // 13. CS单元标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 14. 显示标志 (1 bit)
-    appendBool(bits, true);
-    
-    // 15. DSC标志 (1 bit)
-    appendBool(bits, true);
-    
-    // 16. 频带标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 17. 消息22标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 18. 分配模式标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 19. RAIM标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 20. 通信状态 (19 bits)
-    appendBits(bits, 0, 19);
-    
-    std::string payload = encodeTo6bitAscii(bits);
-    int fillBits = (6 - (bits.size() % 6)) % 6;
-    
-    return buildNmeaSentence(payload, fillBits);
+    return encodeMessage(*message);
 }
 
-// 生成Type 19消息：扩展B类位置报告
-std::string AISMessageGenerator::generateType19Message(const AISVesselData& vesselData)
+std::string AISMessageGenerator::generateType11Message(const AISVesselData &data)
 {
-    std::vector<bool> bits;
+    auto message = std::make_unique<ais::UTCDateResponse>();
+    message->type = ais::AISMessageType::UTC_DATE_RESPONSE;
+    message->mmsi = data.mmsi;
     
-    // 1. 消息类型 (6 bits)
-    appendBits(bits, 19, 6);
+    QDateTime currentTime = QDateTime::currentDateTime();
+    message->year = currentTime.date().year();
+    message->month = currentTime.date().month();
+    message->day = currentTime.date().day();
+    message->hour = currentTime.time().hour();
+    message->minute = currentTime.time().minute();
+    message->second = currentTime.time().second();
     
-    // 2. 重复指示符 (2 bits)
-    appendBits(bits, 0, 2);
+    message->positionAccuracy = true;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->epfdType = data.epfdType;
+    message->spare = 0;
+    message->raimFlag = false;
+    message->communicationState = generateCommunicationState();
     
-    // 3. MMSI (30 bits)
-    appendBits(bits, vesselData.mmsi, 30);
-    
-    // 4. 备用位 (8 bits)
-    appendBits(bits, 0, 8);
-    
-    // 5. 对地速度 (10 bits)
-    uint32_t sog = static_cast<uint32_t>(vesselData.speed * 10.0);
-    if (sog > 1022) sog = 1023;
-    appendBits(bits, sog, 10);
-    
-    // 6. 位置精度 (1 bit)
-    appendBool(bits, true);
-    
-    // 7. 经度 (28 bits)
-    int32_t lonValue = static_cast<int32_t>(vesselData.position.longitude() * 600000.0);
-    appendSignedBits(bits, lonValue, 28);
-    
-    // 8. 纬度 (27 bits)
-    int32_t latValue = static_cast<int32_t>(vesselData.position.latitude() * 600000.0);
-    appendSignedBits(bits, latValue, 27);
-    
-    // 9. 对地航向 (12 bits)
-    uint32_t cog = static_cast<uint32_t>(vesselData.courseOverGround * 10.0);
-    if (cog >= 3600) cog = 3600;
-    appendBits(bits, cog, 12);
-    
-    // 10. 真航向 (9 bits)
-    uint32_t heading = static_cast<uint32_t>(vesselData.heading);
-    if (heading > 359) heading = 511;
-    appendBits(bits, heading, 9);
-    
-    // 11. 时间戳 (6 bits)
-    QDateTime utc = QDateTime::currentDateTimeUtc();
-    appendBits(bits, utc.time().second(), 6);
-    
-    // 12. 备用位 (4 bits)
-    appendBits(bits, 0, 4);
-    
-    // 13. 船名 (120 bits = 20字符)
-    appendString(bits, vesselData.vesselName, 120);
-    
-    // 14. 船舶类型 (8 bits)
-    appendBits(bits, vesselData.shipType, 8);
-    
-    // 15. 船舶尺寸 (30 bits)
-    int dimensionToBow = vesselData.length / 2;
-    int dimensionToStern = vesselData.length - dimensionToBow;
-    int dimensionToPort = vesselData.width / 2;
-    int dimensionToStarboard = vesselData.width - dimensionToPort;
-    
-    appendBits(bits, dimensionToBow, 9);
-    appendBits(bits, dimensionToStern, 9);
-    appendBits(bits, dimensionToPort, 6);
-    appendBits(bits, dimensionToStarboard, 6);
-    
-    // 16. 定位设备类型 (4 bits)
-    appendBits(bits, 1, 4);
-    
-    // 17. RAIM标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 18. DTE标志 (1 bit)
-    appendBool(bits, true);
-    
-    // 19. 分配模式标志 (1 bit)
-    appendBool(bits, false);
-    
-    // 20. 备用位 (4 bits)
-    appendBits(bits, 0, 4);
-    
-    std::string payload = encodeTo6bitAscii(bits);
-    int fillBits = (6 - (bits.size() % 6)) % 6;
-    
-    return buildNmeaSentence(payload, fillBits);
+    return encodeMessage(*message);
 }
 
-// 生成Type 24消息：静态数据报告
-std::string AISMessageGenerator::generateType24Message(const AISVesselData& vesselData, int partNumber)
+std::string AISMessageGenerator::generateType12Message(const AISVesselData &data)
 {
-    std::vector<bool> bits;
+    auto message = std::make_unique<ais::AddressedSafetyMessage>();
+    message->type = ais::AISMessageType::ADDRESSED_SAFETY_MESSAGE;
+    message->mmsi = data.mmsi;
     
-    // 1. 消息类型 (6 bits)
-    appendBits(bits, 24, 6);
+    message->sequenceNumber = 0;
+    message->destinationMmsi = data.destinationMmsi;
+    message->retransmitFlag = false;
+    message->spare = 0;
+    message->safetyText = "SAFETY MESSAGE";
     
-    // 2. 重复指示符 (2 bits)
-    appendBits(bits, 0, 2);
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType13Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::SafetyAcknowledge>();
+    message->type = ais::AISMessageType::SAFETY_ACKNOWLEDGE;
+    message->mmsi = data.mmsi;
     
-    // 3. MMSI (30 bits)
-    appendBits(bits, vesselData.mmsi, 30);
+    message->sequenceNumber = 0;
+    message->destinationMmsi1 = data.destinationMmsi;
+    message->spare = 0;
     
-    // 4. 部分号 (2 bits)
-    appendBits(bits, partNumber, 2);
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType14Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::SafetyRelatedBroadcast>();
+    message->type = ais::AISMessageType::SAFETY_RELATED_BROADCAST;
+    message->mmsi = data.mmsi;
+    
+    message->spare = 0;
+    message->safetyText = "BROADCAST SAFETY MESSAGE";
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType15Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::Interrogation>();
+    message->type = ais::AISMessageType::INTERROGATION;
+    message->mmsi = data.mmsi;
+    
+    message->spare1 = 0;
+    message->destinationMmsi1 = data.destinationMmsi;
+    message->messageType1_1 = 1;
+    message->slotOffset1_1 = 0;
+    message->spare2 = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType16Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::AssignmentModeCommand>();
+    message->type = ais::AISMessageType::ASSIGNMENT_MODE_COMMAND;
+    message->mmsi = data.mmsi;
+    
+    message->spare1 = 0;
+    message->destinationMmsiA = data.destinationMmsi;
+    message->offsetA = 0;
+    message->incrementA = 0;
+    message->spare2 = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType17Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::DGNSSBinaryBroadcast>();
+    message->type = ais::AISMessageType::DGNSS_BINARY_BROADCAST;
+    message->mmsi = data.mmsi;
+    
+    message->spare1 = 0;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->spare2 = 0;
+    message->dgnssData = data.binaryData;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType18Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::StandardClassBReport>();
+    message->type = ais::AISMessageType::STANDARD_CLASS_B_CS_POSITION;
+    message->mmsi = data.mmsi;
+    
+    // B类设备特定字段
+    message->spare1 = 0;
+    message->speedOverGround = data.speed;
+    message->positionAccuracy = true;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->courseOverGround = data.courseOverGround;
+    message->trueHeading = static_cast<int>(data.heading);
+    message->timestampUTC = QDateTime::currentDateTime().time().second();
+    message->spare2 = 0;
+    message->csUnit = 0;
+    message->displayFlag = false;
+    message->dscFlag = false;
+    message->bandFlag = false;
+    message->message22Flag = false;
+    message->assignedModeFlag = false;
+    message->raimFlag = false;
+    message->communicationState = generateCommunicationState();
+    message->spare3 = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType19Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::ExtendedClassBReport>();
+    message->type = ais::AISMessageType::EXTENDED_CLASS_B_CS_POSITION;
+    message->mmsi = data.mmsi;
+    
+    // 扩展B类设备字段
+    message->spare1 = 0;
+    message->speedOverGround = data.speed;
+    message->positionAccuracy = true;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->courseOverGround = data.courseOverGround;
+    message->trueHeading = static_cast<int>(data.heading);
+    message->timestampUTC = QDateTime::currentDateTime().time().second();
+    message->spare2 = 0;
+    message->vesselName = data.vesselName.toStdString();
+    message->shipType = data.shipType;
+    message->dimensionToBow = data.length / 2;
+    message->dimensionToStern = data.length / 2;
+    message->dimensionToPort = data.width / 2;
+    message->dimensionToStarboard = data.width / 2;
+    message->epfdType = data.epfdType;
+    message->spare3 = 0;
+    message->raimFlag = false;
+    message->dte = false;
+    message->assignedModeFlag = false;
+    message->spare4 = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType20Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::DataLinkManagement>();
+    message->type = ais::AISMessageType::DATA_LINK_MANAGEMENT;
+    message->mmsi = data.mmsi;
+    
+    message->spare1 = 0;
+    // 设置默认的数据链路管理参数
+    message->offsetNumber1 = 1;
+    message->reservedSlots1 = 1;
+    message->timeout1 = 3;
+    message->increment1 = 1;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType21Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::AidToNavigationReport>();
+    message->type = ais::AISMessageType::AID_TO_NAVIGATION_REPORT;
+    message->mmsi = data.mmsi;
+    
+    // 助航设备特定字段
+    message->aidType = data.aidType;
+    message->name = data.vesselName.toStdString();
+    message->positionAccuracy = true;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->dimensionToBow = 0;
+    message->dimensionToStern = 0;
+    message->dimensionToPort = 0;
+    message->dimensionToStarboard = 0;
+    message->epfdType = data.epfdType;
+    message->timestampUTC = QDateTime::currentDateTime().time().second();
+    message->offPositionIndicator = data.offPositionIndicator;
+    message->regional = data.regional;
+    message->raimFlag = false;
+    message->virtualAidFlag = data.virtualAidFlag;
+    message->assignedModeFlag = false;
+    message->nameExtension = data.nameExtension.toStdString();
+    message->spare = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType22Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::ChannelManagement>();
+    message->type = ais::AISMessageType::CHANNEL_MANAGEMENT;
+    message->mmsi = data.mmsi;
+    
+    message->spare1 = 0;
+    message->channelA = 2087;
+    message->channelB = 2088;
+    message->txRxMode = 0;
+    message->power = 1;
+    message->longitude1 = data.position.longitude() - 0.1;
+    message->latitude1 = data.position.latitude() - 0.1;
+    message->longitude2 = data.position.longitude() + 0.1;
+    message->latitude2 = data.position.latitude() + 0.1;
+    message->addressedOrBroadcast = 0;
+    message->bandwidthA = 0;
+    message->bandwidthB = 0;
+    message->zoneSize = 0;
+    message->spare2 = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType23Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::GroupAssignmentCommand>();
+    message->type = ais::AISMessageType::GROUP_ASSIGNMENT_COMMAND;
+    message->mmsi = data.mmsi;
+    
+    message->spare1 = 0;
+    message->longitude1 = data.position.longitude() - 0.5;
+    message->latitude1 = data.position.latitude() - 0.5;
+    message->longitude2 = data.position.longitude() + 0.5;
+    message->latitude2 = data.position.latitude() + 0.5;
+    message->stationType = 0;
+    message->shipType = data.shipType;
+    message->txRxMode = 0;
+    message->reportingInterval = 0;
+    message->quietTime = 0;
+    message->spare2 = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType24Message(const AISVesselData &data, int partNumber)
+{
+    auto message = std::make_unique<ais::StaticDataReport>();
+    message->type = ais::AISMessageType::STATIC_DATA_REPORT;
+    message->mmsi = data.mmsi;
+    
+    message->partNumber = partNumber;
     
     if (partNumber == 0) {
         // Part A: 船名
-        // 5. 船名 (120 bits = 20字符)
-        appendString(bits, vesselData.vesselName, 120);
-        
-        // 6. 备用位 (8 bits)
-        appendBits(bits, 0, 8);
+        message->vesselName = data.vesselName.toStdString();
+        message->spare = 0;
     } else {
-        // Part B: 船舶类型和尺寸
-        // 5. 船舶类型 (8 bits)
-        appendBits(bits, vesselData.shipType, 8);
-        
-        // 6. 供应商ID (42 bits = 7字符)
-        appendString(bits, "VENDOR1", 42);
-        
-        // 7. 呼号 (42 bits = 7字符)
-        appendString(bits, vesselData.callSign, 42);
-        
-        // 8. 船舶尺寸 (30 bits)
-        int dimensionToBow = vesselData.length / 2;
-        int dimensionToStern = vesselData.length - dimensionToBow;
-        int dimensionToPort = vesselData.width / 2;
-        int dimensionToStarboard = vesselData.width - dimensionToPort;
-        
-        appendBits(bits, dimensionToBow, 9);
-        appendBits(bits, dimensionToStern, 9);
-        appendBits(bits, dimensionToPort, 6);
-        appendBits(bits, dimensionToStarboard, 6);
-        
-        // 9. 备用位 (6 bits)
-        appendBits(bits, 0, 6);
+        // Part B: 其他静态数据
+        message->shipType = data.shipType;
+        message->vendorId = "TEST";
+        message->callSign = data.callSign.toStdString();
+        message->dimensionToBow = data.length / 2;
+        message->dimensionToStern = data.length / 2;
+        message->dimensionToPort = data.width / 2;
+        message->dimensionToStarboard = data.width / 2;
+        message->mothershipMmsi = 0;
+        message->spare = 0;
     }
     
-    std::string payload = encodeTo6bitAscii(bits);
-    int fillBits = (6 - (bits.size() % 6)) % 6;
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType25Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::SingleSlotBinaryMessage>();
+    message->type = ais::AISMessageType::SINGLE_SLOT_BINARY_MESSAGE;
+    message->mmsi = data.mmsi;
     
-    return buildNmeaSentence(payload, fillBits);
+    message->addressed = false;
+    message->structured = true;
+    message->destinationMmsi = 0;
+    message->designatedAreaCode = data.designatedAreaCode;
+    message->functionalId = data.functionalId;
+    message->binaryData = data.binaryData;
+    message->spare = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType26Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::MultipleSlotBinaryMessage>();
+    message->type = ais::AISMessageType::MULTIPLE_SLOT_BINARY_MESSAGE;
+    message->mmsi = data.mmsi;
+    
+    message->addressed = false;
+    message->structured = true;
+    message->destinationMmsi = 0;
+    message->designatedAreaCode = data.designatedAreaCode;
+    message->functionalId = data.functionalId;
+    message->binaryData = data.binaryData;
+    message->commStateFlag = 0;
+    message->spare = 0;
+    
+    return encodeMessage(*message);
+}
+
+std::string AISMessageGenerator::generateType27Message(const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::LongRangePositionReport>();
+    message->type = ais::AISMessageType::POSITION_REPORT_LONG_RANGE;
+    message->mmsi = data.mmsi;
+    
+    // 长距离位置报告特定字段
+    message->positionAccuracy = true;
+    message->raimFlag = false;
+    message->navigationStatus = data.navigationStatus;
+    message->longitude = data.position.longitude();
+    message->latitude = data.position.latitude();
+    message->speedOverGround = data.speed;
+    message->courseOverGround = data.courseOverGround;
+    message->gnssPositionStatus = true;
+    message->assignedModeFlag = false;
+    message->spare = 0;
+    
+    return encodeMessage(*message);
+}
+
+// ================= 私有方法实现 =================
+
+std::unique_ptr<ais::AISMessage> AISMessageGenerator::createBaseMessage(ais::AISMessageType type, const AISVesselData &data)
+{
+    auto message = std::make_unique<ais::AISMessage>();
+    message->type = type;
+    message->mmsi = data.mmsi;
+    message->repeatIndicator = 0;
+    return message;
+}
+
+std::string AISMessageGenerator::encodeMessage(const ais::AISMessage &message)
+{
+    try {
+        auto nmeaSentences = m_encoder.encode(message);
+        if (!nmeaSentences.empty()) {
+            return nmeaSentences[0]; // 返回第一条NMEA语句
+        }
+    } catch (const std::exception &e) {
+        qWarning() << "AIS message encoding failed:" << e.what();
+    }
+    return "";
+}
+
+void AISMessageGenerator::fillPositionReportFields(ais::PositionReport &report, const AISVesselData &data)
+{
+    report.speedOverGround = data.speed;
+    report.positionAccuracy = true;
+    report.longitude = data.position.longitude();
+    report.latitude = data.position.latitude();
+    report.courseOverGround = data.courseOverGround;
+    report.trueHeading = static_cast<int>(data.heading);
+    report.raimFlag = false;
+}
+
+// 模板版本的填充函数，支持所有位置报告类型
+template<typename T>
+void AISMessageGenerator::fillPositionReportFields(T &report, const AISVesselData &data)
+{
+    report.speedOverGround = data.speed;
+    report.positionAccuracy = true;
+    report.longitude = data.position.longitude();
+    report.latitude = data.position.latitude();
+    report.courseOverGround = data.courseOverGround;
+    report.trueHeading = static_cast<int>(data.heading);
+    report.raimFlag = false;
+}
+
+void AISMessageGenerator::fillStaticDataFields(ais::StaticVoyageData &staticData, const AISVesselData &data)
+{
+    staticData.aisVersion = 0;
+    staticData.imoNumber = data.imo;
+    staticData.callSign = data.callSign.toStdString();
+    staticData.vesselName = data.vesselName.toStdString();
+    staticData.shipType = data.shipType;
+    staticData.dimensionToBow = data.length / 2;
+    staticData.dimensionToStern = data.length / 2;
+    staticData.dimensionToPort = data.width / 2;
+    staticData.dimensionToStarboard = data.width / 2;
+    staticData.epfdType = data.epfdType;
+    
+    // ETA设置
+    QDateTime eta = QDateTime::currentDateTime().addDays(1);
+    staticData.month = eta.date().month();
+    staticData.day = eta.date().day();
+    staticData.hour = eta.time().hour();
+    staticData.minute = eta.time().minute();
+    
+    staticData.draught = data.draft;
+    staticData.destination = data.destination.toStdString();
+    staticData.dte = false;
+}
+
+int AISMessageGenerator::generateCommunicationState()
+{
+    return QRandomGenerator::global()->bounded(0, 8191); // 19位通信状态
 }

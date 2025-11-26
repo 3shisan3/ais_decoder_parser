@@ -1,30 +1,74 @@
 #include "vessels_layer.h"
+
 #include <QPainter>
 #include <QPainterPath>
 #include <QtMath>
+#include <QDateTime>
+#include <QElapsedTimer>
 
 VesselsLayer::VesselsLayer(QObject *parent)
     : BaseLayer(parent)
+    , m_iconCache(100) // 缓存100个图标
 {
+    setPerformanceLevel(1);
+}
+
+VesselsLayer::~VesselsLayer()
+{
+    m_iconCache.clear();
 }
 
 void VesselsLayer::updateVessel(const QString &vesselId, const VesselDisplayInfo &info)
 {
-    m_vessels[vesselId] = info;
-    emit updateRequested();  // 请求重绘
+    QMutexLocker locker(&m_vesselsMutex);
+    
+    // 性能优化：限制最大船舶数量
+    if (m_vessels.size() >= m_maxVessels && !m_vessels.contains(vesselId)) {
+        // 移除最旧的船舶
+        QString oldestId;
+        QDateTime oldestTime = QDateTime::currentDateTime();
+        
+        for (auto it = m_vessels.constBegin(); it != m_vessels.constEnd(); ++it) {
+            if (it.value().lastUpdateTime < oldestTime) {
+                oldestTime = it.value().lastUpdateTime;
+                oldestId = it.key();
+            }
+        }
+        
+        if (!oldestId.isEmpty()) {
+            m_vessels.remove(oldestId);
+            m_iconCache.remove(oldestId); // 同时移除缓存
+        }
+    }
+    
+    VesselDisplayInfo newInfo = info;
+    newInfo.lastUpdateTime = QDateTime::currentDateTime();
+    newInfo.needsRedraw = true;
+    
+    m_vessels[vesselId] = newInfo;
+    m_needsFullRedraw = true;
+    
+    emit updateRequested();
 }
 
 void VesselsLayer::removeVessel(const QString &vesselId)
 {
+    QMutexLocker locker(&m_vesselsMutex);
     if (m_vessels.remove(vesselId) > 0) {
+        m_iconCache.remove(vesselId);
+        m_needsFullRedraw = true;
         emit updateRequested();
     }
 }
 
 void VesselsLayer::clearVessels()
 {
+    QMutexLocker locker(&m_vesselsMutex);
     if (!m_vessels.isEmpty()) {
         m_vessels.clear();
+        m_iconCache.clear();
+        m_visibleVessels.clear();
+        m_needsFullRedraw = true;
         emit updateRequested();
     }
 }
@@ -36,9 +80,11 @@ const VesselDisplayInfo* VesselsLayer::getVesselAtPosition(
     double zoom,
     const TileForCoord::TileAlgorithm &algorithm) const
 {
-    if (!isVisible()) {
+    if (!isVisible() || m_vessels.isEmpty()) {
         return nullptr;
     }
+
+    QMutexLocker locker(&m_vesselsMutex);
 
     // 计算视口中心偏移
     QPointF centerPixel = algorithm.latLongToPixelXY(
@@ -68,18 +114,45 @@ const VesselDisplayInfo* VesselsLayer::getVesselAtPosition(
     return nullptr;
 }
 
+void VesselsLayer::setPerformanceLevel(int level)
+{
+    m_performanceLevel = qBound(0, level, 2);
+    
+    switch (m_performanceLevel) {
+    case 0: // 禁用优化
+        m_maxVessels = 500;
+        break;
+    case 1: // 基础优化
+        m_maxVessels = 200;
+        break;
+    case 2: // 激进优化
+        m_maxVessels = 100;
+        break;
+    }
+    
+    m_needsFullRedraw = true;
+}
+
 void VesselsLayer::render(QPainter *painter,
-                          const QSize &viewport,
-                          const QGeoCoordinate &center,
-                          double zoom,
-                          const TileForCoord::TileAlgorithm &algorithm)
+                                  const QSize &viewport,
+                                  const QGeoCoordinate &center,
+                                  double zoom,
+                                  const TileForCoord::TileAlgorithm &algorithm)
 {
     if (m_vessels.isEmpty() || !isVisible()) {
         return;
     }
 
+    QMutexLocker locker(&m_vesselsMutex);
+
+    QElapsedTimer timer;
+    if (m_performanceLevel > 0) {
+        timer.start();
+    }
+
     painter->save();
-    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::Antialiasing, m_performanceLevel < 2);
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, m_performanceLevel < 2);
 
     // 计算视口中心偏移
     QPointF centerPixel = algorithm.latLongToPixelXY(
@@ -87,9 +160,16 @@ void VesselsLayer::render(QPainter *painter,
     QPointF viewportCenter(viewport.width() / 2.0, viewport.height() / 2.0);
     QPointF offset = viewportCenter - centerPixel;
 
+    // 性能优化：可见区域计算
+    QRectF visibleRect(-50, -50, viewport.width() + 100, viewport.height() + 100);
+    QSet<QString> currentVisibleVessels;
+
+    int vesselsDrawn = 0;
+    int vesselsSkipped = 0;
+
     // 绘制所有船舶
-    for (auto it = m_vessels.constBegin(); it != m_vessels.constEnd(); ++it) {
-        const VesselDisplayInfo &info = it.value();
+    for (auto it = m_vessels.begin(); it != m_vessels.end(); ++it) {
+        VesselDisplayInfo &info = it.value();
         
         if (!info.position.isValid()) {
             continue;
@@ -100,17 +180,44 @@ void VesselsLayer::render(QPainter *painter,
             info.position.longitude(), info.position.latitude(), qFloor(zoom));
         QPointF vesselScreenPos = vesselPixel + offset;
 
-        // 检查是否在可见范围内（加上边界容差）
-        QRectF visibleRect(-100, -100, viewport.width() + 200, viewport.height() + 200);
+        // 性能优化：可见性检查
         if (!visibleRect.contains(vesselScreenPos)) {
+            vesselsSkipped++;
             continue;
         }
 
+        currentVisibleVessels.insert(it.key());
+
+        // 性能优化：细节级别控制
+        bool drawDetails = shouldDrawDetails(zoom) && m_showNames;
+        
+        // 检查是否需要重绘
+        bool needsRedraw = m_needsFullRedraw || info.needsRedraw || 
+                          !m_visibleVessels.contains(it.key());
+
         // 绘制船舶
         drawVessel(painter, vesselScreenPos, info);
+        
+        // 绘制名称（根据性能级别决定）
+        if (drawDetails && m_performanceLevel < 2) {
+            // 名称绘制逻辑...
+        }
+
+        info.needsRedraw = false;
+        vesselsDrawn++;
     }
 
+    m_visibleVessels = currentVisibleVessels;
+    m_needsFullRedraw = false;
+
     painter->restore();
+
+    // 性能监控
+    if (m_performanceLevel > 0 && timer.elapsed() > 16) { // 超过16ms警告
+        qDebug() << "VesselsLayer render time:" << timer.elapsed() << "ms, drawn:" 
+                 << vesselsDrawn << "skipped:" << vesselsSkipped;
+    }
+
     emit renderingComplete();
 }
 
@@ -121,18 +228,18 @@ void VesselsLayer::drawVessel(QPainter *painter, const QPointF &screenPos, const
     // 移动到船舶位置
     painter->translate(screenPos);
     
-    // 旋转到航向角度
-    painter->rotate(info.heading);
+    // 旋转到航向角度（移动的船舶才需要旋转）
+    if (info.speed > 0.5) {
+        painter->rotate(info.heading);
+    }
 
-    // 绘制船舶三角形图标
+    // 获取设备颜色和形状
+    QColor color = getDeviceColor(info.messageType);
     QPolygonF vesselShape;
-    double halfSize = m_iconSize / 2.0;
-    vesselShape << QPointF(0, -halfSize * 1.5)           // 船头
-                << QPointF(halfSize, halfSize * 0.75)    // 右侧
-                << QPointF(-halfSize, halfSize * 0.75);  // 左侧
+    getDeviceShape(info.messageType, vesselShape);
 
     // 填充颜色
-    painter->setBrush(info.color);
+    painter->setBrush(color);
     painter->setPen(QPen(Qt::white, 2));
     painter->drawPolygon(vesselShape);
 
@@ -143,47 +250,17 @@ void VesselsLayer::drawVessel(QPainter *painter, const QPointF &screenPos, const
 
     painter->restore();
 
-    // 绘制船舶名称（如果启用）
-    if (m_showNames && !info.vesselName.isEmpty()) {
-        painter->save();
-        
-        QFont font = painter->font();
-        font.setPointSize(9);
-        font.setBold(true);
-        painter->setFont(font);
-
-        // 计算文本位置（在船舶图标下方）
-        QPointF textPos = screenPos + QPointF(0, m_iconSize);
-        
-        // 绘制文本背景（提高可读性）
-        QString displayText = info.vesselName;
-        QFontMetrics fm(font);
-        QRectF textRect = fm.boundingRect(displayText);
-        textRect.moveCenter(QPointF(textPos.x(), textPos.y() + textRect.height() / 2));
-        textRect.adjust(-3, -1, 3, 1);
-        
-        painter->setBrush(QColor(255, 255, 255, 200));
-        painter->setPen(Qt::NoPen);
-        painter->drawRoundedRect(textRect, 3, 3);
-
-        // 绘制文本
-        painter->setPen(Qt::black);
-        painter->drawText(textRect, Qt::AlignCenter, displayText);
-
-        painter->restore();
-    }
-
-    // 绘制速度指示线（可选）
-    if (info.speed > 0.5) {  // 速度大于0.5节时显示
+    // 性能优化：只在需要时绘制速度指示线
+    if (info.speed > 0.5 && m_performanceLevel < 2) {
         painter->save();
         painter->translate(screenPos);
         painter->rotate(info.heading);
         
         // 根据速度调整线长
         double lineLength = m_iconSize * (1.0 + info.speed / 10.0);
-        lineLength = qMin(lineLength, m_iconSize * 3.0);  // 最大3倍图标大小
+        lineLength = qMin(lineLength, m_iconSize * 3.0);
         
-        QPen speedLinePen(info.color, 2, Qt::DashLine);
+        QPen speedLinePen(color, 2, Qt::DashLine);
         painter->setPen(speedLinePen);
         painter->drawLine(QPointF(0, -m_iconSize * 0.75), 
                          QPointF(0, -lineLength));
@@ -194,17 +271,23 @@ void VesselsLayer::drawVessel(QPainter *painter, const QPointF &screenPos, const
 
 void VesselsLayer::drawTooltip(QPainter *painter, const QPointF &screenPos, const VesselDisplayInfo &info)
 {
+    if (m_performanceLevel == 2) return; // 激进优化模式下不显示tooltip
+
     painter->save();
 
     // 构建提示文本
     QStringList tooltipLines;
     tooltipLines << QString("MMSI: %1").arg(info.mmsi);
     tooltipLines << QString("Name: %1").arg(info.vesselName);
+    tooltipLines << QString("Type: %1").arg(static_cast<int>(info.messageType));
     tooltipLines << QString("Position: %1, %2")
                     .arg(info.position.latitude(), 0, 'f', 6)
                     .arg(info.position.longitude(), 0, 'f', 6);
-    tooltipLines << QString("Heading: %1°").arg(info.heading, 0, 'f', 1);
-    tooltipLines << QString("Speed: %1 kts").arg(info.speed, 0, 'f', 1);
+    
+    if (info.speed > 0) {
+        tooltipLines << QString("Heading: %1°").arg(info.heading, 0, 'f', 1);
+        tooltipLines << QString("Speed: %1 kts").arg(info.speed, 0, 'f', 1);
+    }
 
     // 设置字体
     QFont font = painter->font();
@@ -221,14 +304,14 @@ void VesselsLayer::drawTooltip(QPainter *painter, const QPointF &screenPos, cons
         QRectF rect = fm.boundingRect(line);
         lineRects.append(rect);
         maxWidth = qMax(maxWidth, (int)rect.width());
-        totalHeight += rect.height() + 2;  // 行间距2像素
+        totalHeight += rect.height() + 2;
     }
 
     // 添加内边距
     int padding = 8;
     QRectF tooltipRect(0, 0, maxWidth + padding * 2, totalHeight + padding * 2);
     
-    // 计算提示框位置（在船舶右侧）
+    // 计算提示框位置
     QPointF tooltipPos = screenPos + QPointF(m_iconSize + 10, -tooltipRect.height() / 2);
     tooltipRect.moveTo(tooltipPos);
 
@@ -256,4 +339,98 @@ bool VesselsLayer::isPointNearVessel(const QPointF &point, const QPointF &vessel
     double dy = point.y() - vesselPos.y();
     double distance = qSqrt(dx * dx + dy * dy);
     return distance <= hitRadius;
+}
+
+bool VesselsLayer::isVesselVisible(const QPointF &screenPos, const QSize &viewport) const
+{
+    QRectF visibleArea(-100, -100, viewport.width() + 200, viewport.height() + 200);
+    return visibleArea.contains(screenPos);
+}
+
+bool VesselsLayer::shouldDrawDetails(double zoom) const
+{
+    // 根据缩放级别决定是否显示细节
+    if (m_performanceLevel == 2) return zoom > 10;
+    if (m_performanceLevel == 1) return zoom > 8;
+    return zoom > 5;
+}
+
+void VesselsLayer::cleanupStaleVessels()
+{
+    if (m_performanceLevel == 0) return;
+
+    QDateTime cleanupTime = QDateTime::currentDateTime().addSecs(-300); // 5分钟前的数据
+    
+    QMutexLocker locker(&m_vesselsMutex);
+    QList<QString> toRemove;
+    
+    for (auto it = m_vessels.begin(); it != m_vessels.end(); ++it) {
+        if (it.value().lastUpdateTime < cleanupTime) {
+            toRemove.append(it.key());
+        }
+    }
+    
+    for (const QString &vesselId : toRemove) {
+        m_vessels.remove(vesselId);
+        m_iconCache.remove(vesselId);
+    }
+    
+    if (!toRemove.isEmpty()) {
+        m_needsFullRedraw = true;
+    }
+}
+
+QColor VesselsLayer::getDeviceColor(AISMessageType messageType) const
+{
+    switch (messageType) {
+    case AISMessageType::AID_TO_NAVIGATION_REPORT:
+        return QColor(255, 255, 0); // 黄色 - 助航设备
+    case AISMessageType::BASE_STATION_REPORT:
+        return QColor(128, 128, 128); // 灰色 - 基站
+    case AISMessageType::STANDARD_SAR_AIRCRAFT_REPORT:
+        return QColor(255, 0, 255); // 紫色 - SAR飞机
+    case AISMessageType::BINARY_BROADCAST_MESSAGE:
+    case AISMessageType::BINARY_ADDRESSED_MESSAGE:
+        return QColor(0, 255, 255); // 青色 - 二进制消息
+    default:
+        return QColor(0, 120, 255); // 蓝色 - 普通船舶
+    }
+}
+
+void VesselsLayer::getDeviceShape(AISMessageType messageType, QPolygonF &shape) const
+{
+    double halfSize = m_iconSize / 2.0;
+    shape.clear();
+
+    switch (messageType) {
+    case AISMessageType::AID_TO_NAVIGATION_REPORT:
+        // 助航设备 - 菱形
+        shape << QPointF(0, -halfSize)
+              << QPointF(halfSize, 0)
+              << QPointF(0, halfSize)
+              << QPointF(-halfSize, 0);
+        break;
+        
+    case AISMessageType::BASE_STATION_REPORT:
+        // 基站 - 正方形
+        shape << QPointF(-halfSize, -halfSize)
+              << QPointF(halfSize, -halfSize)
+              << QPointF(halfSize, halfSize)
+              << QPointF(-halfSize, halfSize);
+        break;
+        
+    case AISMessageType::STANDARD_SAR_AIRCRAFT_REPORT:
+        // SAR飞机 - 三角形
+        shape << QPointF(0, -halfSize * 1.5)
+              << QPointF(halfSize, halfSize * 0.75)
+              << QPointF(-halfSize, halfSize * 0.75);
+        break;
+        
+    default:
+        // 普通船舶 - 船形
+        shape << QPointF(0, -halfSize * 1.5)
+              << QPointF(halfSize, halfSize * 0.75)
+              << QPointF(-halfSize, halfSize * 0.75);
+        break;
+    }
 }

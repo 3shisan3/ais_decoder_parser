@@ -49,10 +49,12 @@ MainWindow::MainWindow(QWidget *parent)
     m_vesselsLayer->setVisible(true);
     m_vesselsLayer->setShowVesselNames(true);
     m_vesselsLayer->setVesselIconSize(20);
+    m_vesselsLayer->setPerformanceLevel(1); // 启用基础优化
+    m_vesselsLayer->setMaxVessels(150); // 限制最大显示数量
     
-    // 初始化定时器 - 减少生成间隔以提高更新频率
+    // 优化定时器设置 - 降低更新频率减少卡顿
     m_generationTimer = new QTimer(this);
-    m_generationTimer->setInterval(500); // 改为500ms，提高更新频率
+    m_generationTimer->setInterval(1000); // 改为1000ms，降低更新频率
     connect(m_generationTimer, &QTimer::timeout, this, &MainWindow::onGenerateAisData);
     
     m_sendingTimer = new QTimer(this);
@@ -62,9 +64,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_generationTimer->start();
     m_sendingTimer->start();
     
-    logMessage("AIS数据生成与发送系统已启动");
+    logMessage("AIS数据生成与发送系统已启动 - 优化版本");
     logMessage(QString("UDP发送目标: %1:%2").arg(m_udpHost).arg(m_udpPort));
-    logMessage("系统更新频率: 500ms（提高了位置更新的流畅度）");
+    logMessage("系统更新频率: 1000ms（优化了性能减少卡顿）");
+    logMessage("消息类型: 创建时固定，发送时不再变动");
 }
 
 MainWindow::~MainWindow()
@@ -81,7 +84,7 @@ MainWindow::~MainWindow()
 void MainWindow::setupUi()
 {
     // 设置主窗口
-    setWindowTitle("AIS数据生成与发送系统 v2.0");
+    setWindowTitle("AIS数据生成与发送系统");
     setGeometry(100, 100, 1600, 900);
     
     // 创建地图视图
@@ -89,7 +92,7 @@ void MainWindow::setupUi()
     setCentralWidget(m_mapView);
     m_mapView->setTileUrlTemplate("https://wprd01.is.autonavi.com/appmaptile?&style=6&lang=zh_cn&scl=1&ltype=0&x={x}&y={y}&z={z}");
     m_mapView->setCenter(QGeoCoordinate(31.2304, 121.4737)); // 上海
-    m_mapView->setZoomLevel(13);  // 设置合适的缩放级别
+    m_mapView->setZoomLevel(13);
     
     // 创建任务停靠窗口
     m_taskDock = new QDockWidget("AIS任务管理", this);
@@ -116,37 +119,44 @@ void MainWindow::setupUi()
     
     // 消息类型选择组
     QGroupBox *messageTypeGroup = new QGroupBox("消息类型选择");
-    QVBoxLayout *messageTypeLayout = new QVBoxLayout();
+    QFormLayout *messageTypeLayout = new QFormLayout();
     
-    m_type1CheckBox = new QCheckBox("Type 1 - A类位置报告");
-    m_type1CheckBox->setChecked(true); // 默认启用
-    m_type1CheckBox->setToolTip("位置报告消息（最常用）");
+    m_messageTypeComboBox = new QComboBox();
+    // 添加所有27种AIS消息类型
+    m_messageTypeComboBox->addItem("Type 1 - A类位置报告", static_cast<int>(AISMessageType::POSITION_REPORT_CLASS_A));
+    m_messageTypeComboBox->addItem("Type 2 - A类分配时隙位置报告", static_cast<int>(AISMessageType::POSITION_REPORT_CLASS_A_ASSIGNED));
+    m_messageTypeComboBox->addItem("Type 3 - A类轮询响应位置报告", static_cast<int>(AISMessageType::POSITION_REPORT_CLASS_A_RESPONSE));
+    m_messageTypeComboBox->addItem("Type 4 - 基站报告", static_cast<int>(AISMessageType::BASE_STATION_REPORT));
+    m_messageTypeComboBox->addItem("Type 5 - 静态和航程数据", static_cast<int>(AISMessageType::STATIC_VOYAGE_DATA));
+    m_messageTypeComboBox->addItem("Type 6 - 寻址二进制消息", static_cast<int>(AISMessageType::BINARY_ADDRESSED_MESSAGE));
+    m_messageTypeComboBox->addItem("Type 7 - 二进制确认", static_cast<int>(AISMessageType::BINARY_ACKNOWLEDGE));
+    m_messageTypeComboBox->addItem("Type 8 - 广播二进制消息", static_cast<int>(AISMessageType::BINARY_BROADCAST_MESSAGE));
+    m_messageTypeComboBox->addItem("Type 9 - SAR飞机位置报告", static_cast<int>(AISMessageType::STANDARD_SAR_AIRCRAFT_REPORT));
+    m_messageTypeComboBox->addItem("Type 10 - UTC/日期查询", static_cast<int>(AISMessageType::UTC_DATE_INQUIRY));
+    m_messageTypeComboBox->addItem("Type 11 - UTC/日期响应", static_cast<int>(AISMessageType::UTC_DATE_RESPONSE));
+    m_messageTypeComboBox->addItem("Type 12 - 寻址安全消息", static_cast<int>(AISMessageType::ADDRESSED_SAFETY_MESSAGE));
+    m_messageTypeComboBox->addItem("Type 13 - 安全确认", static_cast<int>(AISMessageType::SAFETY_ACKNOWLEDGE));
+    m_messageTypeComboBox->addItem("Type 14 - 广播安全消息", static_cast<int>(AISMessageType::SAFETY_RELATED_BROADCAST));
+    m_messageTypeComboBox->addItem("Type 15 - 询问", static_cast<int>(AISMessageType::INTERROGATION));
+    m_messageTypeComboBox->addItem("Type 16 - 分配模式命令", static_cast<int>(AISMessageType::ASSIGNMENT_MODE_COMMAND));
+    m_messageTypeComboBox->addItem("Type 17 - DGNSS二进制广播", static_cast<int>(AISMessageType::DGNSS_BINARY_BROADCAST));
+    m_messageTypeComboBox->addItem("Type 18 - B类位置报告", static_cast<int>(AISMessageType::STANDARD_CLASS_B_CS_POSITION));
+    m_messageTypeComboBox->addItem("Type 19 - 扩展B类位置报告", static_cast<int>(AISMessageType::EXTENDED_CLASS_B_CS_POSITION));
+    m_messageTypeComboBox->addItem("Type 20 - 数据链路管理", static_cast<int>(AISMessageType::DATA_LINK_MANAGEMENT));
+    m_messageTypeComboBox->addItem("Type 21 - 助航设备报告", static_cast<int>(AISMessageType::AID_TO_NAVIGATION_REPORT));
+    m_messageTypeComboBox->addItem("Type 22 - 信道管理", static_cast<int>(AISMessageType::CHANNEL_MANAGEMENT));
+    m_messageTypeComboBox->addItem("Type 23 - 组分配命令", static_cast<int>(AISMessageType::GROUP_ASSIGNMENT_COMMAND));
+    m_messageTypeComboBox->addItem("Type 24 - 静态数据报告", static_cast<int>(AISMessageType::STATIC_DATA_REPORT));
+    m_messageTypeComboBox->addItem("Type 25 - 单时隙二进制消息", static_cast<int>(AISMessageType::SINGLE_SLOT_BINARY_MESSAGE));
+    m_messageTypeComboBox->addItem("Type 26 - 多时隙二进制消息", static_cast<int>(AISMessageType::MULTIPLE_SLOT_BINARY_MESSAGE));
+    m_messageTypeComboBox->addItem("Type 27 - 长距离位置报告", static_cast<int>(AISMessageType::POSITION_REPORT_LONG_RANGE));
     
-    m_type5CheckBox = new QCheckBox("Type 5 - 静态和航程数据");
-    m_type5CheckBox->setChecked(false);
-    m_type5CheckBox->setToolTip("包含船名、呼号、目的地等静态信息");
+    messageTypeLayout->addRow("消息类型:", m_messageTypeComboBox);
     
-    m_type18CheckBox = new QCheckBox("Type 18 - B类位置报告");
-    m_type18CheckBox->setChecked(false);
-    m_type18CheckBox->setToolTip("B类设备位置报告");
-    
-    m_type19CheckBox = new QCheckBox("Type 19 - 扩展B类报告");
-    m_type19CheckBox->setChecked(false);
-    m_type19CheckBox->setToolTip("包含船名和尺寸的B类报告");
-    
-    m_type24CheckBox = new QCheckBox("Type 24 - 静态数据报告");
-    m_type24CheckBox->setChecked(false);
-    m_type24CheckBox->setToolTip("B类静态数据（分A/B两部分）");
-    
-    messageTypeLayout->addWidget(m_type1CheckBox);
-    messageTypeLayout->addWidget(m_type5CheckBox);
-    messageTypeLayout->addWidget(m_type18CheckBox);
-    messageTypeLayout->addWidget(m_type19CheckBox);
-    messageTypeLayout->addWidget(m_type24CheckBox);
-    
-    QLabel *noteLabel = new QLabel("注意：多选时将轮换发送所选类型");
+    QLabel *noteLabel = new QLabel("注意：船舶创建时确定消息类型，发送时保持不变");
     noteLabel->setStyleSheet("color: gray; font-style: italic;");
-    messageTypeLayout->addWidget(noteLabel);
+    noteLabel->setWordWrap(true);
+    messageTypeLayout->addRow(noteLabel);
     
     messageTypeGroup->setLayout(messageTypeLayout);
     taskLayout->addWidget(messageTypeGroup);
@@ -282,35 +292,7 @@ void MainWindow::setupConnections()
             this, &MainWindow::onUdpSettingsChanged);
     connect(m_udpPortSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &MainWindow::onUdpSettingsChanged);
-    
-    // 消息类型变化 - Qt6使用checkStateChanged
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    connect(m_type1CheckBox, &QCheckBox::checkStateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type5CheckBox, &QCheckBox::checkStateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type18CheckBox, &QCheckBox::checkStateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type19CheckBox, &QCheckBox::checkStateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type24CheckBox, &QCheckBox::checkStateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-#else
-    // Qt5使用stateChanged
-    connect(m_type1CheckBox, &QCheckBox::stateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type5CheckBox, &QCheckBox::stateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type18CheckBox, &QCheckBox::stateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type19CheckBox, &QCheckBox::stateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-    connect(m_type24CheckBox, &QCheckBox::stateChanged,
-            this, &MainWindow::onMessageTypeChanged);
-#endif
 }
-
-// 此文件接续第1部分
 
 /**
  * @brief 路线规划完成处理
@@ -323,14 +305,24 @@ void MainWindow::onRoutePlanned(const QVector<QGeoCoordinate> &route)
         return;
     }
     
-    // 弹出对话框获取任务名称
+    // 弹出对话框获取任务名称和消息类型
     QDialog dialog(this);
     dialog.setWindowTitle("创建AIS任务");
-    dialog.setFixedWidth(300);
+    dialog.setFixedWidth(400);
     
     QFormLayout form(&dialog);
     QLineEdit taskNameEdit;
     form.addRow("任务名称:", &taskNameEdit);
+    
+    QComboBox messageTypeComboBox;
+    // 添加常用消息类型
+    messageTypeComboBox.addItem("Type 1 - A类位置报告", static_cast<int>(ais::AISMessageType::POSITION_REPORT_CLASS_A));
+    messageTypeComboBox.addItem("Type 4 - 基站报告", static_cast<int>(ais::AISMessageType::BASE_STATION_REPORT));
+    messageTypeComboBox.addItem("Type 5 - 静态和航程数据", static_cast<int>(ais::AISMessageType::STATIC_VOYAGE_DATA));
+    messageTypeComboBox.addItem("Type 18 - B类位置报告", static_cast<int>(ais::AISMessageType::STANDARD_CLASS_B_CS_POSITION));
+    messageTypeComboBox.addItem("Type 21 - 助航设备报告", static_cast<int>(ais::AISMessageType::AID_TO_NAVIGATION_REPORT));
+    messageTypeComboBox.addItem("Type 24 - 静态数据报告", static_cast<int>(ais::AISMessageType::STATIC_DATA_REPORT));
+    form.addRow("消息类型:", &messageTypeComboBox);
     
     QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     form.addRow(&buttons);
@@ -343,7 +335,9 @@ void MainWindow::onRoutePlanned(const QVector<QGeoCoordinate> &route)
         if (taskName.isEmpty()) {
             taskName = QString("任务_%1").arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
         }
-        createAisTask(taskName, route);
+        
+        AISMessageType messageType = static_cast<AISMessageType>(messageTypeComboBox.currentData().toInt());
+        createAisTask(taskName, route, messageType);
     }
 }
 
@@ -351,15 +345,16 @@ void MainWindow::onRoutePlanned(const QVector<QGeoCoordinate> &route)
  * @brief 创建AIS任务
  * @param taskName 任务名称
  * @param route 航线路径
+ * @param messageType 消息类型
  */
-void MainWindow::createAisTask(const QString &taskName, const QVector<QGeoCoordinate> &route)
+void MainWindow::createAisTask(const QString &taskName, const QVector<QGeoCoordinate> &route, AISMessageType messageType)
 {
     AisGenerationTask task;
     task.taskId = QUuid::createUuid().toString();
     task.taskName = taskName;
-    task.vesselInfo = generateRandomVesselInfo();
+    task.vesselInfo = generateRandomVesselInfo(messageType);
     task.route = route;
-    task.updateInterval = 500; // 与定时器同步
+    task.updateInterval = 1000; // 与定时器同步
     task.isActive = false;
     task.startTime = QDateTime::currentDateTime();
     task.currentPointIndex = 0;
@@ -369,21 +364,19 @@ void MainWindow::createAisTask(const QString &taskName, const QVector<QGeoCoordi
     // 设置初始位置为航线起点
     task.vesselInfo.position = route.first();
     
-    // 获取当前启用的消息类型
-    task.vesselInfo.enabledMessageTypes = getEnabledMessageTypes();
-    
     m_aisTasks.append(task);
     
     // 更新列表
-    QListWidgetItem *item = new QListWidgetItem(taskName);
+    QString listText = QString("%1 [%2]").arg(taskName).arg(getMessageTypeName(messageType));
+    QListWidgetItem *item = new QListWidgetItem(listText);
     item->setData(Qt::UserRole, task.taskId);
     m_taskList->addItem(item);
     
     m_statusLabel->setText(QString("已创建任务: %1").arg(taskName));
-    logMessage(QString("创建任务: %1 (MMSI: %2, 消息类型: %3种)")
+    logMessage(QString("创建任务: %1 (MMSI: %2, 消息类型: %3)")
         .arg(taskName)
         .arg(task.vesselInfo.mmsi)
-        .arg(task.vesselInfo.enabledMessageTypes.size()));
+        .arg(getMessageTypeName(messageType)));
     
     // 立即更新显示
     updateVesselDisplay(task);
@@ -391,16 +384,18 @@ void MainWindow::createAisTask(const QString &taskName, const QVector<QGeoCoordi
 
 /**
  * @brief 生成随机船舶信息
+ * @param messageType 消息类型
  * @return 船舶信息结构
  */
-AisVesselInfo MainWindow::generateRandomVesselInfo()
+AisVesselInfo MainWindow::generateRandomVesselInfo(AISMessageType messageType)
 {
     AisVesselInfo vessel;
     
     static const QStringList vesselNames = {
         "Ocean Star", "Sea Explorer", "Marine Voyager", "Blue Whale",
         "Pacific King", "Atlantic Queen", "Cargo Master", "Container Express",
-        "Harmony", "Discovery", "Navigator", "Endeavour"
+        "Harmony", "Discovery", "Navigator", "Endeavour",
+        "Navigation Buoy A", "Channel Marker B", "Light House C" // 助航设备名称
     };
     
     static const QList<QColor> vesselColors = {
@@ -421,16 +416,32 @@ AisVesselInfo MainWindow::generateRandomVesselInfo()
     vessel.mmsi = generateRandomMmsi().toInt();
     vessel.imo = QRandomGenerator::global()->bounded(9000000, 9999999);
     vessel.callSign = generateRandomCallsign();
-    vessel.shipType = QRandomGenerator::global()->bounded(60, 90); // 货船类型
+    
+    // 根据消息类型设置不同的船舶类型
+    switch (messageType) {
+        case AISMessageType::AID_TO_NAVIGATION_REPORT:
+            vessel.shipType = 1; // 助航设备
+            vessel.speed = 0; // 固定设备
+            break;
+        case AISMessageType::BASE_STATION_REPORT:
+            vessel.shipType = 0; // 基站
+            vessel.speed = 0;
+            break;
+        default:
+            vessel.shipType = QRandomGenerator::global()->bounded(60, 90); // 货船类型
+            vessel.speed = QRandomGenerator::global()->bounded(5, 25);
+            break;
+    }
+    
     vessel.length = QRandomGenerator::global()->bounded(50, 300);
     vessel.width = QRandomGenerator::global()->bounded(10, 50);
     vessel.draft = QRandomGenerator::global()->bounded(5, 20) / 10.0;
-    vessel.speed = QRandomGenerator::global()->bounded(5, 25);
     vessel.heading = QRandomGenerator::global()->bounded(0, 360);
-    vessel.courseOverGround = vessel.heading; // 初始化对地航向与真航向相同
+    vessel.courseOverGround = vessel.heading;
     vessel.navigationStatus = 0; // 在航
     vessel.rateOfTurn = 0;
     vessel.destination = destinations[QRandomGenerator::global()->bounded(destinations.size())];
+    vessel.messageType = messageType; // 固定消息类型
     
     // 生成随机ETA
     QDateTime eta = QDateTime::currentDateTime().addDays(QRandomGenerator::global()->bounded(1, 7));
@@ -592,27 +603,6 @@ void MainWindow::onUdpSettingsChanged()
 }
 
 /**
- * @brief 消息类型变化处理
- */
-void MainWindow::onMessageTypeChanged()
-{
-    QSet<AISMessageType> enabledTypes = getEnabledMessageTypes();
-    
-    if (enabledTypes.isEmpty()) {
-        QMessageBox::warning(this, "警告", "至少需要选择一种消息类型！");
-        m_type1CheckBox->setChecked(true); // 强制启用Type 1
-        return;
-    }
-    
-    // 更新所有任务的消息类型
-    for (AisGenerationTask &task : m_aisTasks) {
-        task.vesselInfo.enabledMessageTypes = enabledTypes;
-    }
-    
-    logMessage(QString("已更新消息类型配置，当前启用 %1 种类型").arg(enabledTypes.size()));
-}
-
-/**
  * @brief 切换任务面板显示
  */
 void MainWindow::onToggleTaskDock()
@@ -630,33 +620,6 @@ void MainWindow::onClearLog()
 }
 
 /**
- * @brief 获取当前启用的消息类型
- * @return 消息类型集合
- */
-QSet<AISMessageType> MainWindow::getEnabledMessageTypes() const
-{
-    QSet<AISMessageType> types;
-    
-    if (m_type1CheckBox->isChecked()) {
-        types.insert(AISMessageType::TYPE_1_POSITION_REPORT);
-    }
-    if (m_type5CheckBox->isChecked()) {
-        types.insert(AISMessageType::TYPE_5_STATIC_VOYAGE);
-    }
-    if (m_type18CheckBox->isChecked()) {
-        types.insert(AISMessageType::TYPE_18_CLASS_B_POSITION);
-    }
-    if (m_type19CheckBox->isChecked()) {
-        types.insert(AISMessageType::TYPE_19_EXTENDED_CLASS_B);
-    }
-    if (m_type24CheckBox->isChecked()) {
-        types.insert(AISMessageType::TYPE_24_STATIC_DATA);
-    }
-    
-    return types;
-}
-
-/**
  * @brief 生成AIS数据（定时调用）
  * 计算船舶位置并更新地图显示
  */
@@ -669,6 +632,13 @@ void MainWindow::onGenerateAisData()
             continue;
         }
         
+        // 优化：跳过不需要移动的设备
+        if (task.vesselInfo.messageType == AISMessageType::AID_TO_NAVIGATION_REPORT ||
+            task.vesselInfo.messageType == AISMessageType::BASE_STATION_REPORT) {
+            // 助航设备和基站保持固定位置
+            continue;
+        }
+        
         // 计算船舶位置
         double timeElapsed = task.startTime.msecsTo(currentTime) / 1000.0; // 秒
         double totalDistance = 0.0;
@@ -677,6 +647,8 @@ void MainWindow::onGenerateAisData()
         for (int i = 1; i < task.route.size(); ++i) {
             totalDistance += task.route[i-1].distanceTo(task.route[i]);
         }
+        
+        if (totalDistance <= 0) continue;
         
         // 计算当前应完成的比例（循环航行）
         double distanceTraveled = fmod(timeElapsed * task.vesselInfo.speed * 0.5144, totalDistance);
@@ -742,13 +714,26 @@ void MainWindow::updateVesselDisplay(const AisGenerationTask &task)
     displayInfo.color = task.vesselInfo.vesselColor;
     displayInfo.vesselId = task.vesselInfo.vesselId;
     
+    // 根据设备类型设置不同的图标颜色
+    switch (task.vesselInfo.messageType) {
+        case AISMessageType::AID_TO_NAVIGATION_REPORT:
+            displayInfo.color = Qt::yellow; // 助航设备用黄色
+            break;
+        case AISMessageType::BASE_STATION_REPORT:
+            displayInfo.color = Qt::gray; // 基站用灰色
+            break;
+        default:
+            // 船舶保持原有颜色
+            break;
+    }
+    
     // 更新船舶图层
     m_vesselsLayer->updateVessel(task.vesselInfo.vesselId, displayInfo);
 }
 
 /**
  * @brief 发送AIS数据（定时调用）
- * 根据配置的消息类型发送数据
+ * 根据固定的消息类型发送数据
  */
 void MainWindow::onSendAisData()
 {
@@ -760,42 +745,11 @@ void MainWindow::onSendAisData()
             continue;
         }
         
-        // 检查是否有启用的消息类型
-        if (task.vesselInfo.enabledMessageTypes.isEmpty()) {
-            continue;
-        }
-        
-        // 将启用的消息类型转换为列表以便选择
-        QList<AISMessageType> enabledTypes = task.vesselInfo.enabledMessageTypes.values();
-        
-        // 根据计数器轮换选择消息类型
-        AISMessageType messageType = enabledTypes[task.messageCounter % enabledTypes.size()];
-        task.messageCounter++;
-        
         // 转换船舶信息
         AISVesselData vesselData = convertToAISVesselData(task.vesselInfo);
         
-        // 生成AIS消息
-        std::string aisData = generateAisMessage(vesselData, messageType);
-        
-        QString messageTypeName;
-        switch (messageType) {
-            case AISMessageType::TYPE_1_POSITION_REPORT:
-                messageTypeName = "Type 1 (A类位置)";
-                break;
-            case AISMessageType::TYPE_5_STATIC_VOYAGE:
-                messageTypeName = "Type 5 (静态数据)";
-                break;
-            case AISMessageType::TYPE_18_CLASS_B_POSITION:
-                messageTypeName = "Type 18 (B类位置)";
-                break;
-            case AISMessageType::TYPE_19_EXTENDED_CLASS_B:
-                messageTypeName = "Type 19 (扩展B类)";
-                break;
-            case AISMessageType::TYPE_24_STATIC_DATA:
-                messageTypeName = "Type 24 (静态报告)";
-                break;
-        }
+        // 使用固定的消息类型生成AIS消息
+        std::string aisData = generateAisMessage(vesselData, task.vesselInfo.messageType);
         
         if (!aisData.empty()) {
             // 使用communicate API发送数据
@@ -812,18 +766,20 @@ void MainWindow::onSendAisData()
                     .arg(m_udpHost)
                     .arg(m_udpPort);
                 
-                logmsg += QString("  船舶: %1 (MMSI: %2)\n")
+                logmsg += QString("  设备: %1 (MMSI: %2)\n")
                     .arg(task.vesselInfo.vesselName)
                     .arg(task.vesselInfo.mmsi);
                 
-                logmsg += QString("  消息类型: %1\n").arg(messageTypeName);
+                logmsg += QString("  消息类型: %1\n").arg(getMessageTypeName(task.vesselInfo.messageType));
                 logmsg += QString("  位置: 纬度 %1, 经度 %2\n")
                     .arg(task.vesselInfo.position.latitude(), 0, 'f', 6)
                     .arg(task.vesselInfo.position.longitude(), 0, 'f', 6);
                 
-                logmsg += QString("  航向: %1°, 航速: %2节\n")
-                    .arg(task.vesselInfo.heading, 0, 'f', 1)
-                    .arg(task.vesselInfo.speed, 0, 'f', 1);
+                if (task.vesselInfo.speed > 0) {
+                    logmsg += QString("  航向: %1°, 航速: %2节\n")
+                        .arg(task.vesselInfo.heading, 0, 'f', 1)
+                        .arg(task.vesselInfo.speed, 0, 'f', 1);
+                }
                 
                 logmsg += QString("  数据: %1").arg(QString::fromStdString(aisData).trimmed());
                 
@@ -837,6 +793,8 @@ void MainWindow::onSendAisData()
                     .arg(ret));
             }
         }
+        
+        task.messageCounter++;
     }
     
     if (sentCount > 0) {
@@ -865,7 +823,7 @@ AISVesselData MainWindow::convertToAISVesselData(const AisVesselInfo& vesselInfo
     data.position = vesselInfo.position;
     data.speed = vesselInfo.speed;
     data.heading = vesselInfo.heading;
-    data.courseOverGround = vesselInfo.courseOverGround; // 使用正确的字段
+    data.courseOverGround = vesselInfo.courseOverGround;
     data.navigationStatus = vesselInfo.navigationStatus;
     data.rateOfTurn = vesselInfo.rateOfTurn;
     data.destination = vesselInfo.destination;
@@ -885,26 +843,31 @@ AISVesselData MainWindow::convertToAISVesselData(const AisVesselInfo& vesselInfo
  */
 std::string MainWindow::generateAisMessage(const AISVesselData& vesselData, AISMessageType messageType)
 {
+    // 使用AISMessageGenerator生成消息
     switch (messageType) {
-        case AISMessageType::TYPE_1_POSITION_REPORT:
+        case AISMessageType::POSITION_REPORT_CLASS_A:
             return m_aisGenerator.generateType1Message(vesselData);
-            
-        case AISMessageType::TYPE_5_STATIC_VOYAGE:
+        case AISMessageType::POSITION_REPORT_CLASS_A_ASSIGNED:
+            return m_aisGenerator.generateType2Message(vesselData);
+        case AISMessageType::POSITION_REPORT_CLASS_A_RESPONSE:
+            return m_aisGenerator.generateType3Message(vesselData);
+        case AISMessageType::BASE_STATION_REPORT:
+            return m_aisGenerator.generateType4Message(vesselData);
+        case AISMessageType::STATIC_VOYAGE_DATA:
             return m_aisGenerator.generateType5Message(vesselData);
-            
-        case AISMessageType::TYPE_18_CLASS_B_POSITION:
+        case AISMessageType::STANDARD_CLASS_B_CS_POSITION:
             return m_aisGenerator.generateType18Message(vesselData);
-            
-        case AISMessageType::TYPE_19_EXTENDED_CLASS_B:
+        case AISMessageType::EXTENDED_CLASS_B_CS_POSITION:
             return m_aisGenerator.generateType19Message(vesselData);
-            
-        case AISMessageType::TYPE_24_STATIC_DATA:
+        case AISMessageType::AID_TO_NAVIGATION_REPORT:
+            return m_aisGenerator.generateType21Message(vesselData);
+        case AISMessageType::STATIC_DATA_REPORT:
             // Type 24分A/B两部分，这里随机选择
             return m_aisGenerator.generateType24Message(vesselData, 
                 QRandomGenerator::global()->bounded(2));
-            
         default:
-            return "";
+            // 对于其他消息类型，默认使用Type 1
+            return m_aisGenerator.generateType1Message(vesselData);
     }
 }
 
@@ -916,28 +879,38 @@ void MainWindow::onRandomGenerate()
 {
     // 创建对话框
     QDialog dialog(this);
-    dialog.setWindowTitle("随机生成船舶");
-    dialog.setFixedWidth(350);
+    dialog.setWindowTitle("随机生成设备");
+    dialog.setFixedWidth(400);
     
     QFormLayout form(&dialog);
     
     QSpinBox *countSpinBox = new QSpinBox();
-    countSpinBox->setRange(1, 100);
-    countSpinBox->setValue(10);
-    countSpinBox->setSuffix(" 艘");
+    countSpinBox->setRange(1, 50); // 减少最大数量避免卡顿
+    countSpinBox->setValue(5);
+    countSpinBox->setSuffix(" 个");
     form.addRow("生成数量:", countSpinBox);
     
     QSpinBox *routePointsSpinBox = new QSpinBox();
-    routePointsSpinBox->setRange(2, 10);
-    routePointsSpinBox->setValue(4);
+    routePointsSpinBox->setRange(2, 8); // 减少最大航点数
+    routePointsSpinBox->setValue(3);
     routePointsSpinBox->setSuffix(" 个航点");
     form.addRow("航线点数:", routePointsSpinBox);
+    
+    QComboBox *messageTypeComboBox = new QComboBox();
+    // 添加常用消息类型
+    messageTypeComboBox->addItem("Type 1 - A类位置报告", static_cast<int>(ais::AISMessageType::POSITION_REPORT_CLASS_A));
+    messageTypeComboBox->addItem("Type 4 - 基站报告", static_cast<int>(ais::AISMessageType::BASE_STATION_REPORT));
+    messageTypeComboBox->addItem("Type 5 - 静态和航程数据", static_cast<int>(ais::AISMessageType::STATIC_VOYAGE_DATA));
+    messageTypeComboBox->addItem("Type 18 - B类位置报告", static_cast<int>(ais::AISMessageType::STANDARD_CLASS_B_CS_POSITION));
+    messageTypeComboBox->addItem("Type 21 - 助航设备报告", static_cast<int>(ais::AISMessageType::AID_TO_NAVIGATION_REPORT));
+    messageTypeComboBox->addItem("Type 24 - 静态数据报告", static_cast<int>(ais::AISMessageType::STATIC_DATA_REPORT));
+    form.addRow("消息类型:", messageTypeComboBox);
     
     QCheckBox *autoStartCheckBox = new QCheckBox("生成后自动启动");
     autoStartCheckBox->setChecked(true);
     form.addRow("", autoStartCheckBox);
     
-    QLabel *noteLabel = new QLabel("注意：将在当前地图可见范围内随机生成船舶和航线");
+    QLabel *noteLabel = new QLabel("注意：将在当前地图可见范围内随机生成设备，性能优化版本");
     noteLabel->setWordWrap(true);
     noteLabel->setStyleSheet("color: gray; font-style: italic;");
     form.addRow(noteLabel);
@@ -951,20 +924,28 @@ void MainWindow::onRandomGenerate()
     if (dialog.exec() == QDialog::Accepted) {
         int count = countSpinBox->value();
         int routePoints = routePointsSpinBox->value();
+
+        AISMessageType messageType = static_cast<AISMessageType>(messageTypeComboBox->currentData().toInt());
         bool autoStart = autoStartCheckBox->isChecked();
         
-        logMessage(QString("开始随机生成 %1 艘船舶，每艘 %2 个航点").arg(count).arg(routePoints));
+        logMessage(QString("开始随机生成 %1 个设备，类型: %2").arg(count).arg(getMessageTypeName(messageType)));
         
         for (int i = 0; i < count; i++) {
             // 生成随机起点
             QGeoCoordinate startPos = generateRandomPositionInView();
             
-            // 生成随机航线
-            QVector<QGeoCoordinate> route = generateRandomRoute(startPos, routePoints);
+            // 对于固定设备（基站、助航设备），不需要航线
+            QVector<QGeoCoordinate> route;
+            if (messageType == AISMessageType::BASE_STATION_REPORT || 
+                messageType == AISMessageType::AID_TO_NAVIGATION_REPORT) {
+                route = {startPos}; // 只有一个点
+            } else {
+                route = generateRandomRoute(startPos, routePoints);
+            }
             
             // 创建任务
-            QString taskName = QString("随机船舶_%1").arg(i + 1);
-            createAisTask(taskName, route);
+            QString taskName = QString("%1_%2").arg(getMessageTypeName(messageType)).arg(i + 1);
+            createAisTask(taskName, route, messageType);
             
             // 如果自动启动，启动任务
             if (autoStart && !m_aisTasks.isEmpty()) {
@@ -973,11 +954,11 @@ void MainWindow::onRandomGenerate()
             }
         }
         
-        logMessage(QString("成功生成 %1 艘随机船舶").arg(count));
-        m_statusLabel->setText(QString("已生成 %1 艘随机船舶").arg(count));
+        logMessage(QString("成功生成 %1 个设备").arg(count));
+        m_statusLabel->setText(QString("已生成 %1 个设备").arg(count));
         
         QMessageBox::information(this, "完成", 
-            QString("成功生成 %1 艘随机船舶！").arg(count));
+            QString("成功生成 %1 个设备！\n类型: %2").arg(count).arg(getMessageTypeName(messageType)));
     }
 }
 
@@ -992,8 +973,7 @@ QGeoCoordinate MainWindow::generateRandomPositionInView()
     double zoomLevel = m_mapView->zoomLevel();
     
     // 根据缩放级别计算合理的偏移范围（度）
-    // 缩放级别越高，范围越小
-    double range = 0.5 / qPow(2, zoomLevel - 10);
+    double range = 0.3 / qPow(2, zoomLevel - 10); // 减小范围避免过于分散
     
     // 生成随机偏移
     double latOffset = (QRandomGenerator::global()->generateDouble() - 0.5) * range;
@@ -1020,7 +1000,7 @@ QVector<QGeoCoordinate> MainWindow::generateRandomRoute(const QGeoCoordinate& st
     
     // 根据缩放级别确定航点间距
     double zoomLevel = m_mapView->zoomLevel();
-    double stepRange = 0.3 / qPow(2, zoomLevel - 10);
+    double stepRange = 0.2 / qPow(2, zoomLevel - 10); // 减小步长
     
     for (int i = 1; i < numPoints; i++) {
         // 生成下一个航点（相对于当前点的偏移）
@@ -1037,6 +1017,45 @@ QVector<QGeoCoordinate> MainWindow::generateRandomRoute(const QGeoCoordinate& st
     }
     
     return route;
+}
+
+/**
+ * @brief 获取消息类型名称
+ * @param type 消息类型
+ * @return 类型名称
+ */
+QString MainWindow::getMessageTypeName(AISMessageType type) const
+{
+    switch (type) {
+        case AISMessageType::POSITION_REPORT_CLASS_A: return "Type 1";
+        case AISMessageType::POSITION_REPORT_CLASS_A_ASSIGNED: return "Type 2";
+        case AISMessageType::POSITION_REPORT_CLASS_A_RESPONSE: return "Type 3";
+        case AISMessageType::BASE_STATION_REPORT: return "Type 4";
+        case AISMessageType::STATIC_VOYAGE_DATA: return "Type 5";
+        case AISMessageType::BINARY_ADDRESSED_MESSAGE: return "Type 6";
+        case AISMessageType::BINARY_ACKNOWLEDGE: return "Type 7";
+        case AISMessageType::BINARY_BROADCAST_MESSAGE: return "Type 8";
+        case AISMessageType::STANDARD_SAR_AIRCRAFT_REPORT: return "Type 9";
+        case AISMessageType::UTC_DATE_INQUIRY: return "Type 10";
+        case AISMessageType::UTC_DATE_RESPONSE: return "Type 11";
+        case AISMessageType::ADDRESSED_SAFETY_MESSAGE: return "Type 12";
+        case AISMessageType::SAFETY_ACKNOWLEDGE: return "Type 13";
+        case AISMessageType::SAFETY_RELATED_BROADCAST: return "Type 14";
+        case AISMessageType::INTERROGATION: return "Type 15";
+        case AISMessageType::ASSIGNMENT_MODE_COMMAND: return "Type 16";
+        case AISMessageType::DGNSS_BINARY_BROADCAST: return "Type 17";
+        case AISMessageType::STANDARD_CLASS_B_CS_POSITION: return "Type 18";
+        case AISMessageType::EXTENDED_CLASS_B_CS_POSITION: return "Type 19";
+        case AISMessageType::DATA_LINK_MANAGEMENT: return "Type 20";
+        case AISMessageType::AID_TO_NAVIGATION_REPORT: return "Type 21";
+        case AISMessageType::CHANNEL_MANAGEMENT: return "Type 22";
+        case AISMessageType::GROUP_ASSIGNMENT_COMMAND: return "Type 23";
+        case AISMessageType::STATIC_DATA_REPORT: return "Type 24";
+        case AISMessageType::SINGLE_SLOT_BINARY_MESSAGE: return "Type 25";
+        case AISMessageType::MULTIPLE_SLOT_BINARY_MESSAGE: return "Type 26";
+        case AISMessageType::POSITION_REPORT_LONG_RANGE: return "Type 27";
+        default: return "Unknown";
+    }
 }
 
 /**

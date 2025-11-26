@@ -1,153 +1,147 @@
 #ifndef AIS_MESSAGE_GENERATOR_H
 #define AIS_MESSAGE_GENERATOR_H
 
-#include <string>
-#include <vector>
-#include <cstdint>
+#include <QObject>
 #include <QGeoCoordinate>
-#include <QString>
+#include <QDateTime>
+#include <string>
+#include <memory>
+
+#include "messages/type_definitions.h"
+#include "ais_encoder.h"
+
+// using namespace ais;
 
 /**
- * @brief AIS消息类型枚举
+ * @brief AIS船舶数据结构
  */
-enum class AISMessageType
-{
-    TYPE_1_POSITION_REPORT = 1,      // A类位置报告
-    TYPE_5_STATIC_VOYAGE = 5,        // 静态和航程数据
-    TYPE_18_CLASS_B_POSITION = 18,   // B类位置报告
-    TYPE_19_EXTENDED_CLASS_B = 19,   // 扩展B类位置报告
-    TYPE_24_STATIC_DATA = 24         // 静态数据报告
-};
-
-/**
- * @brief AIS船舶基础信息
- */
-struct AISVesselData
-{
-    int mmsi = 0;                       // 海上移动业务标识
-    int imo = 0;                        // IMO编号
-    QString callSign;                   // 呼号
-    QString vesselName;                 // 船名
-    int shipType = 0;                   // 船舶类型
-    int length = 0;                     // 总长度（米）
-    int width = 0;                      // 宽度（米）
-    double draft = 0.0;                 // 吃水深度（米）
+struct AISVesselData {
+    int mmsi = 0;
+    int imo = 0;
+    QString callSign;
+    QString vesselName;
+    int shipType = 0;
+    int length = 0;
+    int width = 0;
+    double draft = 0.0;
+    QGeoCoordinate position;
+    double speed = 0.0;           // 节
+    double heading = 0.0;         // 度
+    double courseOverGround = 0.0; // 对地航向（度）
+    int navigationStatus = 0;
+    int rateOfTurn = 0;
+    QString destination;
+    int etaMonth = 0;
+    int etaDay = 0;
+    int etaHour = 0;
+    int etaMinute = 0;
     
-    // 动态信息
-    QGeoCoordinate position;            // 位置
-    double speed = 0.0;                 // 对地速度（节）
-    double heading = 0.0;               // 真航向（度）
-    double courseOverGround = 0.0;      // 对地航向（度）
-    int navigationStatus = 0;           // 导航状态
-    int rateOfTurn = 0;                 // 转向率
+    // 基站特定字段
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    int epfdType = 1;
     
-    // 航程信息
-    QString destination;                // 目的地
-    int etaMonth = 0;                   // 预计到达时间-月
-    int etaDay = 0;                     // 预计到达时间-日
-    int etaHour = 0;                    // 预计到达时间-时
-    int etaMinute = 0;                  // 预计到达时间-分
+    // 助航设备特定字段
+    int aidType = 0;
+    QString nameExtension;
+    bool offPositionIndicator = false;
+    int regional = 0;
+    bool virtualAidFlag = false;
+    
+    // 二进制消息字段
+    std::vector<uint8_t> binaryData;
+    int designatedAreaCode = 0;
+    int functionalId = 0;
+    uint32_t destinationMmsi = 0;
 };
 
 /**
  * @brief AIS消息生成器类
- * 负责生成符合ITU-R M.1371标准的AIS NMEA消息
+ * 支持所有27种AIS消息类型的生成
  */
-class AISMessageGenerator
+class AISMessageGenerator : public QObject
 {
+    Q_OBJECT
+
 public:
-    AISMessageGenerator();
-    ~AISMessageGenerator() = default;
-
-    /**
-     * @brief 生成Type 1位置报告（A类设备）
-     * @param vesselData 船舶数据
-     * @return NMEA格式的AIS消息
-     */
-    std::string generateType1Message(const AISVesselData& vesselData);
-
-    /**
-     * @brief 生成Type 5静态和航程数据
-     * @param vesselData 船舶数据
-     * @return NMEA格式的AIS消息
-     */
-    std::string generateType5Message(const AISVesselData& vesselData);
-
-    /**
-     * @brief 生成Type 18标准B类位置报告
-     * @param vesselData 船舶数据
-     * @return NMEA格式的AIS消息
-     */
-    std::string generateType18Message(const AISVesselData& vesselData);
-
-    /**
-     * @brief 生成Type 19扩展B类位置报告
-     * @param vesselData 船舶数据
-     * @return NMEA格式的AIS消息
-     */
-    std::string generateType19Message(const AISVesselData& vesselData);
-
-    /**
-     * @brief 生成Type 24静态数据报告
-     * @param vesselData 船舶数据
-     * @param partNumber 部分号（0=A部分，1=B部分）
-     * @return NMEA格式的AIS消息
-     */
-    std::string generateType24Message(const AISVesselData& vesselData, int partNumber);
+    explicit AISMessageGenerator(QObject *parent = nullptr);
+    
+    // 27种AIS消息类型的生成方法
+    std::string generateType1Message(const AISVesselData &data);
+    std::string generateType2Message(const AISVesselData &data);
+    std::string generateType3Message(const AISVesselData &data);
+    std::string generateType4Message(const AISVesselData &data);
+    std::string generateType5Message(const AISVesselData &data);
+    std::string generateType6Message(const AISVesselData &data);
+    std::string generateType7Message(const AISVesselData &data);
+    std::string generateType8Message(const AISVesselData &data);
+    std::string generateType9Message(const AISVesselData &data);
+    std::string generateType10Message(const AISVesselData &data);
+    std::string generateType11Message(const AISVesselData &data);
+    std::string generateType12Message(const AISVesselData &data);
+    std::string generateType13Message(const AISVesselData &data);
+    std::string generateType14Message(const AISVesselData &data);
+    std::string generateType15Message(const AISVesselData &data);
+    std::string generateType16Message(const AISVesselData &data);
+    std::string generateType17Message(const AISVesselData &data);
+    std::string generateType18Message(const AISVesselData &data);
+    std::string generateType19Message(const AISVesselData &data);
+    std::string generateType20Message(const AISVesselData &data);
+    std::string generateType21Message(const AISVesselData &data);
+    std::string generateType22Message(const AISVesselData &data);
+    std::string generateType23Message(const AISVesselData &data);
+    std::string generateType24Message(const AISVesselData &data, int partNumber = 0);
+    std::string generateType25Message(const AISVesselData &data);
+    std::string generateType26Message(const AISVesselData &data);
+    std::string generateType27Message(const AISVesselData &data);
 
 private:
     /**
-     * @brief 添加指定位数的二进制数据
-     * @param bits 二进制向量
-     * @param value 数值
-     * @param bitCount 位数
+     * @brief 创建基础AIS消息
+     * @param type 消息类型
+     * @param data 船舶数据
+     * @return 基础AIS消息
      */
-    void appendBits(std::vector<bool>& bits, uint32_t value, size_t bitCount);
-
+    std::unique_ptr<ais::AISMessage> createBaseMessage(ais::AISMessageType type, const AISVesselData &data);
+    
     /**
-     * @brief 添加有符号整数（使用补码）
-     * @param bits 二进制向量
-     * @param value 有符号数值
-     * @param bitCount 位数
+     * @brief 使用AISEncoder编码消息
+     * @param message AIS消息对象
+     * @return NMEA格式字符串
      */
-    void appendSignedBits(std::vector<bool>& bits, int32_t value, size_t bitCount);
-
+    std::string encodeMessage(const ais::AISMessage &message);
+    
     /**
-     * @brief 添加布尔值
-     * @param bits 二进制向量
-     * @param value 布尔值
+     * @brief 填充位置报告通用字段
+     * @param report 位置报告对象
+     * @param data 船舶数据
      */
-    void appendBool(std::vector<bool>& bits, bool value);
-
+    void fillPositionReportFields(ais::PositionReport &report, const AISVesselData &data);
+    
     /**
-     * @brief 添加字符串（6-bit ASCII编码）
-     * @param bits 二进制向量
-     * @param text 文本
-     * @param maxBits 最大位数
+     * @brief 填充位置报告通用字段（模板版本）
      */
-    void appendString(std::vector<bool>& bits, const QString& text, size_t maxBits);
-
+    template<typename T>
+    void fillPositionReportFields(T &report, const AISVesselData &data);
+    
     /**
-     * @brief 将二进制数据编码为6-bit ASCII（符合AIS标准）
-     * @param bits 二进制向量
-     * @return 编码后的字符串
+     * @brief 填充静态数据通用字段
+     * @param staticData 静态数据对象
+     * @param data 船舶数据
      */
-    std::string encodeTo6bitAscii(const std::vector<bool>& bits);
-
+    void fillStaticDataFields(ais::StaticVoyageData &staticData, const AISVesselData &data);
+    
     /**
-     * @brief 计算NMEA校验和
-     * @param data NMEA数据（不包含$和*）
-     * @return 校验和（十六进制字符串）
+     * @brief 生成随机通信状态
+     * @return 通信状态值
      */
-    QString calculateNmeaChecksum(const QString& data);
-
-    /**
-     * @brief 构建完整NMEA语句
-     * @param payload 6-bit ASCII编码的载荷
-     * @param fillBits 填充位数
-     * @return 完整的NMEA语句
-     */
-    std::string buildNmeaSentence(const std::string& payload, int fillBits);
+    int generateCommunicationState();
+    
+    ais::AISEncoder m_encoder; // AIS编码器
 };
 
 #endif // AIS_MESSAGE_GENERATOR_H
